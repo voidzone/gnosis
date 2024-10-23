@@ -1,0 +1,14 @@
+tag 7e22ca71daa07877ffb59d84262df652ac76f7f6 v5.11
+Author:	Chabb91 <>
+Date:	Thu May 2 00:20:57 2024 +0200
+
+commit 0db0f233dc637704e4ef0d5ccd219c7ff332fc96
+Author: Chabb91 <>
+Date:   Thu May 2 00:09:43 2024 +0200
+
+    The initial release for Cataclysm.
+    Fixed:
+    Replaced InterfaceOptionsFrame_OpenToCategory with LibStub("AceConfigRegistry-3.0"):NotifyChange for the Cataclysm client, meaning now the options panel properly refreshes after element deletion.
+    
+    The LibDialog-1.0 librariy is currently broken due to StaticPopup_DisplayedFrames is no longer public, breaking all popup windows in the options panel. This is a known issue and devs are working on it but in the meantime I will upload a separate Gnosis build (off version control) with the hotfix included so the settings arent unusable.
+

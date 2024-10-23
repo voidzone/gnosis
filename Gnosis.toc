@@ -1,0 +1,53 @@
+## Interface: 110002, 40400, 11504
+## Title: Gnosis (|cffaaff44Castbars and Timers|r) @project-version@
+## Notes: Highly configurable castbar and single timer addon.
+## Author: @project-author@
+## Version: @project-version@
+## SavedVariables: GnosisDB, GnosisConfigs
+## SavedVariablesPerCharacter: GnosisChar, GnosisCharConfig
+## OptionalDeps: Ace3, AceGUI-3.0-SharedMediaWidgets, LibClassicCasterino, LibClassicDurations, LibCompress, LibDialog-1.0, LibRangeCheck-3.0, LibSharedMedia-3.0
+## LoadOnDemand: 0
+## DefaultState: enabled
+## X-Revision: @project-revision@
+## X-Date: @project-date-iso@
+## IconTexture: 425951
+
+# Libraries
+#@no-lib-strip@
+Libs\LibStub\LibStub.lua
+Libs\CallbackHandler-1.0\CallbackHandler-1.0.xml
+Libs\AceAddon-3.0\AceAddon-3.0.xml
+Libs\AceGUI-3.0\AceGUI-3.0.xml
+Libs\AceComm-3.0\AceComm-3.0.xml
+Libs\AceConfig-3.0\AceConfig-3.0.xml
+Libs\AceConsole-3.0\AceConsole-3.0.xml
+Libs\AceDB-3.0\AceDB-3.0.xml
+Libs\AceEvent-3.0\AceEvent-3.0.xml
+Libs\LibSharedMedia-3.0\lib.xml
+Libs\AceGUI-3.0-SharedMediaWidgets\widget.xml
+Libs\LibRangeCheck-3.0\LibRangeCheck-3.0\LibRangeCheck-3.0.lua
+Libs\LibDialog-1.0\lib.xml
+Libs\AceSerializer-3.0\AceSerializer-3.0.xml
+Libs\LibCompress\lib.xml
+Libs\LibClassicCasterino\LibClassicCasterino.lua
+Libs\LibClassicDurations\LibClassicDurations.xml
+
+## X-Embeds: Ace3, AceGUI-3.0-SharedMediaWidgets, LibBetterBlizzOptions-1.0, LibClassicCasterino, LibClassicDurations, LibCompress, LibDialog-1.0, LibRangeCheck-3.0, LibSharedMedia-3.0
+#@end-no-lib-strip@
+
+# xml
+Gnosis.xml
+
+# lua
+Gnosis.lua
+Locale.lua
+Callback.lua
+OptionsFuncs.lua
+Options.lua
+Variables.lua
+Bars.lua
+Timers.lua
+Encoding.lua
+
+# Gnosis' StatusBar implementation
+CreateStatusBar.lua

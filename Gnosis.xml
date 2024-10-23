@@ -1,0 +1,13 @@
+<!--
+Gnosis @project-version@ last changed @project-date-iso@
+Gnosis.xml last changed @file-date-iso@
+-->
+<Ui>
+	<Frame name="GnosisDummy">
+		<Scripts>
+			<OnUpdate>
+				Gnosis:OnUpdate();
+			</OnUpdate>
+		</Scripts>
+	</Frame>
+</Ui>

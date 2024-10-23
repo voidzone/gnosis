@@ -1,0 +1,40 @@
+externals:
+	Libs/LibStub:
+		url: svn://svn.wowace.com/wow/libstub/mainline/trunk
+		tag: latest
+	Libs/LibSharedMedia-3.0:
+		url: svn://svn.wowace.com/wow/libsharedmedia-3-0/mainline/trunk
+		tag: latest
+	Libs/LibRangeCheck-3.0:
+		url: https://github.com/WeakAuras/LibRangeCheck-3.0
+		tag: latest
+	Libs/AceGUI-3.0-SharedMediaWidgets:
+		url: svn://svn.wowace.com/wow/ace-gui-3-0-shared-media-widgets/mainline/trunk/AceGUI-3.0-SharedMediaWidgets
+	Libs/AceAddon-3.0:
+		url: svn://svn.wowace.com/wow/ace3/mainline/trunk/AceAddon-3.0
+	Libs/AceGUI-3.0:
+		url: svn://svn.wowace.com/wow/ace3/mainline/trunk/AceGUI-3.0
+	Libs/AceConfig-3.0:
+		url: svn://svn.wowace.com/wow/ace3/mainline/trunk/AceConfig-3.0
+	Libs/AceConsole-3.0:
+		url: svn://svn.wowace.com/wow/ace3/mainline/trunk/AceConsole-3.0
+	Libs/AceDB-3.0:
+		url: svn://svn.wowace.com/wow/ace3/mainline/trunk/AceDB-3.0
+	Libs/AceEvent-3.0:
+		url: svn://svn.wowace.com/wow/ace3/mainline/trunk/AceEvent-3.0
+	Libs/AceSerializer-3.0:
+		url: svn://svn.wowace.com/wow/ace3/mainline/trunk/AceSerializer-3.0
+	Libs/AceComm-3.0:
+		url: svn://svn.wowace.com/wow/ace3/mainline/trunk/AceComm-3.0
+	Libs/CallbackHandler-1.0:
+		url: svn://svn.wowace.com/wow/callbackhandler/mainline/trunk/CallbackHandler-1.0
+		tag: latest
+	Libs/LibCompress:
+		url: svn://svn.wowace.com/wow/libcompress/mainline/trunk
+		tag: latest
+	Libs/LibClassicDurations:
+		url: https://repos.curseforge.com/wow/libclassicdurations
+	Libs/LibClassicCasterino:
+		url: https://github.com/rgd87/LibClassicCasterino
+
+enable-nolib-creation: yes
