@@ -193,21 +193,21 @@ function Gnosis:En(status)
 end
 
 function Gnosis:OpenOptions()
-	if (not self.iofcalled) then
-		-- call twice the first time
-		if (wowmainline) or (wowwc) or (wowcc) or (wowclassic) then
-			Settings.OpenToCategory(Gnosis.optFrame.name);
-		else
-			InterfaceOptionsFrame_OpenToCategory(Gnosis.optFrame);
-		end
+	if self.optFrame and self.optFrame.Show then
+		self.optFrame:Show()
+		self.optFrame:SetFrameStrata("DIALOG")
+		self.optFrame:SetClampedToScreen(true)
+		self.optFrame:SetMovable(true)
+		self.optFrame:EnableMouse(true)
+	else
+		print("Gnosis Optionen konnten nicht geöffnet werden.")
 	end
 
-	if (wowmainline) or (wowwc) or (wowcc) or (wowclassic) then
-		Settings.OpenToCategory(Gnosis.optFrame.name);
-	else
-		InterfaceOptionsFrame_OpenToCategory(Gnosis.optFrame);
+	-- Addon aktivieren, falls es noch nicht aktiviert ist
+	if not self.bGnosisEnabled then
+		self:InitialConfig()
+		self:En(true)
 	end
-	self.iofcalled = true;
 end
 
 function Gnosis:OpenCfgOptions()
@@ -657,6 +657,11 @@ function Gnosis:HandleChatCommand(cmd)
 			self:InjectTimer(bar, text, cnt, spell, iscast);
 		else
 			Gnosis:OpenOptions();
+			-- Stelle sicher, dass das Addon aktiviert ist und Leisten laufen
+			if not self.bGnosisEnabled then
+				self:InitialConfig()
+				self:En(true)
+			end
 		end
 	end
 end
