@@ -35,7 +35,7 @@ local wowanyclassic = (wowclassic or wowbcc or wowwc or wowcc);
 -- WOW classic support
 local UnitCastingInfo = UnitCastingInfo;
 local UnitChannelInfo = UnitChannelInfo;
-local GetSpecialization = GetSpecialization;
+local GetSpecialization = (C_SpecializationInfo and C_SpecializationInfo.GetActiveSpecGroup) and C_SpecializationInfo.GetActiveSpecGroup or GetSpecialization;
 
 if (wowclassic and Gnosis.libclcno) then
 	UnitCastingInfo = function(unit)

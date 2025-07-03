@@ -33,6 +33,7 @@ local wowclassic = (WOW_PROJECT_ID == WOW_PROJECT_CLASSIC);
 local wowbcc = (WOW_PROJECT_ID == WOW_PROJECT_BURNING_CRUSADE_CLASSIC);
 local wowwc = (WOW_PROJECT_ID == WOW_PROJECT_WRATH_CLASSIC);
 local wowcc = (WOW_PROJECT_ID == WOW_PROJECT_CATACLYSM_CLASSIC);
+local wowmc = (WOW_PROJECT_ID == WOW_PROJECT_MISTS_CLASSIC);
 
 -- libraries
 Gnosis = LibStub("AceAddon-3.0"):NewAddon("Gnosis", "AceConsole-3.0", "AceEvent-3.0");
@@ -195,17 +196,17 @@ end
 function Gnosis:OpenOptions()
 	if (not self.iofcalled) then
 		-- call twice the first time
-		if (wowmainline) or (wowwc) or (wowcc) or (wowclassic) then
-			Settings.OpenToCategory(Gnosis.optFrame.name);
-		else
+		if (wowbcc) then
 			InterfaceOptionsFrame_OpenToCategory(Gnosis.optFrame);
+		else
+			Settings.OpenToCategory(Gnosis.optFrame.name);
 		end
 	end
 
-	if (wowmainline) or (wowwc) or (wowcc) or (wowclassic) then
-		Settings.OpenToCategory(Gnosis.optFrame.name);
-	else
+	if (wowbcc) then
 		InterfaceOptionsFrame_OpenToCategory(Gnosis.optFrame);
+	else
+		Settings.OpenToCategory(Gnosis.optFrame.name);
 	end
 	self.iofcalled = true;
 end
@@ -213,21 +214,21 @@ end
 function Gnosis:OpenCfgOptions()
 	if (not self.iofcfgcalled) then
 		-- call twice the first time
-		if (wowmainline) or (wowclassic) then
-			Settings.OpenToCategory(Gnosis.optCfgs);
+		if (wowbcc) then
+			InterfaceOptionsFrame_OpenToCategory(Gnosis.optCfgs);
 		elseif (wowwc or wowcc) then
 			LibStub("AceConfigRegistry-3.0"):NotifyChange(Gnosis.optCfgsName);
 		else
-			InterfaceOptionsFrame_OpenToCategory(Gnosis.optCfgs);
+			Settings.OpenToCategory(Gnosis.optCfgs);
 		end
 	end
 
-	if (wowmainline) or (wowclassic) then
-		Settings.OpenToCategory(Gnosis.optCfgs);
+	if (wowbcc) then
+		InterfaceOptionsFrame_OpenToCategory(Gnosis.optCfgs);
 	elseif (wowwc or wowcc) then
 		LibStub("AceConfigRegistry-3.0"):NotifyChange(Gnosis.optCfgsName);
 	else
-		InterfaceOptionsFrame_OpenToCategory(Gnosis.optCfgs);
+		Settings.OpenToCategory(Gnosis.optCfgs);
 	end
 	self.iofcfgcalled = true;
 end
@@ -235,21 +236,21 @@ end
 function Gnosis:OpenCastbarOptions()
 	if (not self.iofcbcalled) then
 		-- call twice the first time
-		if (wowmainline) or (wowclassic) then
-			Settings.OpenToCategory(Gnosis.optCBs);
+		if (wowbcc) then
+			InterfaceOptionsFrame_OpenToCategory(Gnosis.optCBs);
 		elseif (wowwc or wowcc) then
 			LibStub("AceConfigRegistry-3.0"):NotifyChange(Gnosis.optCBsName);
 		else
-			InterfaceOptionsFrame_OpenToCategory(Gnosis.optCBs);
+			Settings.OpenToCategory(Gnosis.optCBs);
 		end
 	end
 
-	if (wowmainline) or (wowclassic) then
-		Settings.OpenToCategory(Gnosis.optCBs);
+	if (wowbcc) then
+		InterfaceOptionsFrame_OpenToCategory(Gnosis.optCBs);
 	elseif (wowwc or wowcc) then
 		LibStub("AceConfigRegistry-3.0"):NotifyChange(Gnosis.optCBsName);
 	else
-		InterfaceOptionsFrame_OpenToCategory(Gnosis.optCBs);
+		Settings.OpenToCategory(Gnosis.optCBs);
 	end
 	self.iofcbcalled = true;
 end
