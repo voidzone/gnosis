@@ -1624,7 +1624,7 @@ ChatFrame_AddMessageEventFilter("CHAT_MSG_INSTANCE_CHAT", exchangeHyperlink);
 ChatFrame_AddMessageEventFilter("CHAT_MSG_INSTANCE_CHAT_LEADER", exchangeHyperlink);
 ChatFrame_AddMessageEventFilter("CHAT_MSG_CHANNEL", exchangeHyperlink);
 
-local function repaste_hyperlink(self, link, text, ...)
+local function repaste_hyperlink(link, text, ...)
 	-- remove text coloring
 	link = string_gsub(link, "\124c[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]", "");
 	link = string_gsub(link, "\124r", "");
@@ -1647,7 +1647,7 @@ local function repaste_hyperlink(self, link, text, ...)
 	end
 end
 
-hooksecurefunc("ChatFrame_OnHyperlinkShow", repaste_hyperlink);
+hooksecurefunc("SetItemRef", repaste_hyperlink);
 
 function Gnosis:ExportBarEncStr(key)
 	if (key and self.s.cbconf[key]) then
