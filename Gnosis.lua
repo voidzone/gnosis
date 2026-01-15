@@ -196,18 +196,9 @@ end
 function Gnosis:OpenOptions()
 	if (not self.iofcalled) then
 		-- call twice the first time
-		if (wowbcc) then
-			InterfaceOptionsFrame_OpenToCategory(Gnosis.optFrame);
-		else
 			Settings.OpenToCategory(Gnosis.optFrame.name);
-		end
 	end
-
-	if (wowbcc) then
-		InterfaceOptionsFrame_OpenToCategory(Gnosis.optFrame);
-	else
 		Settings.OpenToCategory(Gnosis.optFrame.name);
-	end
 	self.iofcalled = true;
 end
 
