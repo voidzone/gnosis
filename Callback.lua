@@ -45,11 +45,6 @@ if (wowclassic and Gnosis.libclcno) then
 	UnitChannelInfo = function(unit)
 		return Gnosis.libclcno:UnitChannelInfo(unit);
 	end
-elseif (wowbcc) then
-	UnitCastingInfo = function(unit)
-		local name, text, texture, startTimeMS, endTimeMS, isTradeSkill, castID, spellId = UnitCastingInfo(unit);
-		return name, text, texture, startTimeMS, endTimeMS, isTradeSkill, castID, nil, spellId;
-	end
 end
 
 -- init OnUpdate handler, anchoring bars

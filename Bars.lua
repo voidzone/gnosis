@@ -73,13 +73,6 @@ if (wowclassic and Gnosis.libclcno) then
 	end
 end
 
-if (wowbcc) then
-	UnitCastingInfo = function(unit)
-		local name, text, texture, startTimeMS, endTimeMS, isTradeSkill, castID, spellId = UnitCastingInfo(unit)
-		return name, text, texture, startTimeMS, endTimeMS, isTradeSkill, castID, nil, spellId
-	end
-end
-
 function Gnosis:UpgradeTable(dst, src)
 	for key, value in pairs(src) do
 		if(dst[key] == nil) then
