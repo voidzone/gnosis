@@ -196,9 +196,9 @@ end
 function Gnosis:OpenOptions()
 	if (not self.iofcalled) then
 		-- call twice the first time
-			Settings.OpenToCategory(Gnosis.optFrame.name);
+        Settings.OpenToCategory(Gnosis.optFrame.name);
 	end
-		Settings.OpenToCategory(Gnosis.optFrame.name);
+    Settings.OpenToCategory(Gnosis.optFrame.name);
 	self.iofcalled = true;
 end
 
@@ -256,12 +256,9 @@ end
 function Gnosis:HideBlizzardCastbar(status)
 	if (status) then	-- hide castbar
 		for key, value in pairs(self.tBlizzCastbar) do
-			if(wowmainline and PlayerCastingBarFrame:IsEventRegistered(value)) then
+			if(PlayerCastingBarFrame:IsEventRegistered(value)) then
 				table_insert(self.blizzcastbar, value);
 				PlayerCastingBarFrame:UnregisterEvent(value);
-			elseif(not wowmainline and CastingBarFrame:IsEventRegistered(value)) then
-				table_insert(self.blizzcastbar, value);
-				CastingBarFrame:UnregisterEvent(value);
 			end
 		end
 
