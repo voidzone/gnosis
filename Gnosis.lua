@@ -196,10 +196,10 @@ end
 function Gnosis:OpenOptions()
 	if (not self.iofcalled) then
 		-- call twice the first time
-			Settings.OpenToCategory(Gnosis.optFrame.name);
+		Settings.OpenToCategory(Gnosis.optFrame.name);
 	end
 		Settings.OpenToCategory(Gnosis.optFrame.name);
-	self.iofcalled = true;
+		self.iofcalled = true;
 end
 
 function Gnosis:OpenCfgOptions()
@@ -256,10 +256,10 @@ end
 function Gnosis:HideBlizzardCastbar(status)
 	if (status) then	-- hide castbar
 		for key, value in pairs(self.tBlizzCastbar) do
-			if(wowmainline and PlayerCastingBarFrame:IsEventRegistered(value)) then
+			if((wowmainline or wowbcc) and PlayerCastingBarFrame:IsEventRegistered(value)) then
 				table_insert(self.blizzcastbar, value);
 				PlayerCastingBarFrame:UnregisterEvent(value);
-			elseif(not wowmainline and CastingBarFrame:IsEventRegistered(value)) then
+			elseif(not (wowmainline or wowbcc) and CastingBarFrame:IsEventRegistered(value)) then
 				table_insert(self.blizzcastbar, value);
 				CastingBarFrame:UnregisterEvent(value);
 			end
@@ -276,7 +276,7 @@ function Gnosis:HideBlizzardCastbar(status)
 		end
 	else	-- restore castbar events, it might not actually enable the blizzard castbar if another addon hides it
 		for key, value in pairs(self.blizzcastbar) do
-			if (wowmainline) then
+			if (wowmainline or wowbcc) then
 				PlayerCastingBarFrame:RegisterEvent(value);
 			else
 				CastingBarFrame:RegisterEvent(value);
