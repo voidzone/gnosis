@@ -1,4 +1,4 @@
-## Interface: 110207, 50500, 40402, 20504, 11507
+## Interface: 120000, 50500, 40402, 20504, 11507
 ## Title: Gnosis (|cffaaff44Castbars and Timers|r) @project-version@
 ## Notes: Highly configurable castbar and single timer addon.
 ## Author: @project-author@
