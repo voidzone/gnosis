@@ -5,9 +5,7 @@ externals:
 	Libs/LibSharedMedia-3.0:
 		url: svn://svn.wowace.com/wow/libsharedmedia-3-0/mainline/trunk
 		tag: latest
-	#Libs/LibRangeCheck-3.0:
-	#	url: https://github.com/WeakAuras/LibRangeCheck-3.0
-	#	tag: latest
+	Libs/LibRangeCheck-3.0: https://github.com/WeakAuras/LibRangeCheck-3.0/
 	Libs/AceGUI-3.0-SharedMediaWidgets:
 		url: svn://svn.wowace.com/wow/ace-gui-3-0-shared-media-widgets/mainline/trunk/AceGUI-3.0-SharedMediaWidgets
 	Libs/AceAddon-3.0:
@@ -37,4 +35,7 @@ externals:
 	Libs/LibClassicCasterino:
 		url: https://github.com/rgd87/LibClassicCasterino
 
-enable-nolib-creation: yes
+enable-nolib-creation: no
+
+move-folders:
+	Libs/LibRangeCheck-3.0/LibRangeCheck-3.0: Libs/LibRangeCheck-3.0
