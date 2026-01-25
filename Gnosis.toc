@@ -25,7 +25,7 @@ Libs\AceDB-3.0\AceDB-3.0.xml
 Libs\AceEvent-3.0\AceEvent-3.0.xml
 Libs\LibSharedMedia-3.0\lib.xml
 Libs\AceGUI-3.0-SharedMediaWidgets\widget.xml
-Libs\LibRangeCheck-3.0\LibRangeCheck-3.0.lua
+Libs\LibRangeCheck-3.0\LibRangeCheck-3.0\LibRangeCheck-3.0.lua
 Libs\LibDialog-1.0\lib.xml
 Libs\AceSerializer-3.0\AceSerializer-3.0.xml
 Libs\LibCompress\lib.xml

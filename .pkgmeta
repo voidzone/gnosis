@@ -36,6 +36,3 @@ externals:
 		url: https://github.com/rgd87/LibClassicCasterino
 
 enable-nolib-creation: no
-
-move-folders:
-	Libs/LibRangeCheck-3.0/LibRangeCheck-3.0: Libs/LibRangeCheck-3.0
