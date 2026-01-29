@@ -44,7 +44,7 @@ if (wowmainline) then
 	Gnosis.tMiscEvents = {
 		"PLAYER_REGEN_DISABLED",
 		"PLAYER_REGEN_ENABLED",
-		"COMBAT_LOG_EVENT_UNFILTERED",
+		--"COMBAT_LOG_EVENT_UNFILTERED",
 		"UNIT_SPELLCAST_SENT",
 		"PLAYER_ENTERING_WORLD",
 		"PLAYER_FOCUS_CHANGED",
@@ -232,7 +232,7 @@ Gnosis.tSoundChannels = {
 function Gnosis:StartupVariables()
 	local fCurTime = GetTime() * 1000;
 
-	self.ver = 5.33;
+	self.ver = 5.34;
 	self.optver = 4.62;
 	self.build = "@project-version@";
 	self.addonname = "Gnosis";
