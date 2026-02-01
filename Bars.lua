@@ -433,6 +433,9 @@ function Gnosis:FindCBNext(unit)
 end
 
 function Gnosis:FindGCDBars(spell, fCurTime, spellid)
+	if ( wowmainline ) then
+		return
+	end
 	-- using spell id
 	local start, cd = GetSpellCooldown(spellid);
 	-- using "Global Cooldown" spell
