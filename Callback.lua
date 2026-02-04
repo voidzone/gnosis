@@ -606,8 +606,10 @@ function Gnosis:COMBAT_LOG_EVENT_UNFILTERED()
 end
 
 function Gnosis:UNIT_SPELLCAST_SENT(event, unit, target)
-	if (issecretvalue(unit) or issecretvalue(target)) then
-		return
+	if (wowmainline) then
+		if (issecretvalue(unit) or issecretvalue(target)) then
+			return
+		end
 	end
 	-- latency estimation
 	self.strLastTarget = (target and target ~= "") and target or nil;
