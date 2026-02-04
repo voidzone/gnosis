@@ -2082,6 +2082,15 @@ function Gnosis:SetupCastbar(cb, bIsChannel, fCurTime)
 		name, displayName, texture, startTime, endTime, isTradeSkill, id, notInterruptible = UnitCastingInfo(cfg.unit);
 		numStages = 0
 	end
+
+	if (wowmainline) then
+		if (issecretvalue(startTime)) then
+			startTime = fCurTime
+		end
+		if (issecretvalue(endTime)) then
+			endTime = fCurTime
+		end
+	end
 	
 	local bIsCharge = numStages > 0
 	
