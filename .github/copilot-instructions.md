@@ -3,6 +3,8 @@
 ## Project Overview
 Gnosis is a World of Warcraft addon providing highly configurable castbars and timers. It supports multiple WoW versions (Mainline, Classic, BCC, Wrath, Cataclysm, Mists) and uses the Ace3 framework with LibSharedMedia for customization.
 
+This is a third-party addon (not part of Blizzard's official UI source). It wraps functionality around LibSharedMedia textures, fonts, and sounds for highly customizable bar displays across all major WoW versions.
+
 ## Architecture
 
 ### Core Components
@@ -21,19 +23,30 @@ Gnosis is a World of Warcraft addon providing highly configurable castbars and t
 - **Gnosis.mstimers**: Runtime timer instances keyed by unit ID
 
 ### Multi-Version Support Pattern
+**Critical**: Different WoW versions have different APIs and event availability. Gnosis handles this via:
+
 ```lua
--- Example from Callback.lua, Gnosis.lua, etc.
+-- Version detection (Gnosis.lua, Callback.lua, Variables.lua, Bars.lua)
 local wowmainline = (WOW_PROJECT_ID == WOW_PROJECT_MAINLINE);
 local wowclassic = (WOW_PROJECT_ID == WOW_PROJECT_CLASSIC);
 local wowbcc = (WOW_PROJECT_ID == WOW_PROJECT_BURNING_CRUSADE_CLASSIC);
+local wowwc = (WOW_PROJECT_ID == WOW_PROJECT_WRATH_CLASSIC);
+local wowcc = (WOW_PROJECT_ID == WOW_PROJECT_CATACLYSM_CLASSIC);
 
--- Conditional API wrapping for deprecated functions
+-- API polyfills for deprecated functions moved to C_Spell/C_Item namespaces
 local GetSpellInfo = GetSpellInfo or function(spellID)
   local spellInfo = C_Spell.GetSpellInfo(spellID);
-  -- convert and return
+  return spellInfo.name, nil, spellInfo.iconID, spellInfo.castTime, spellInfo.minRange, spellInfo.maxRange, spellInfo.spellID, spellInfo.originalIconID;
+end
+
+-- Classic-specific: Use LibClassicCasterino wrappers for casting info
+if (wowclassic and Gnosis.libclcno) then
+  UnitCastingInfo = function(unit) return Gnosis.libclcno:UnitCastingInfo(unit); end
+  UnitChannelInfo = function(unit) return Gnosis.libclcno:UnitChannelInfo(unit); end
 end
 ```
-Check WOW_PROJECT_ID constants early; use polyfills for deprecated APIs (GetSpellInfo, GetSpellCooldown, etc.) that moved to C_Spell/C_Item namespaces in newer versions.
+
+**When making changes**: Always check the version-specific event lists in Variables.lua before modifying event handlers. Different versions have different UNIT_SPELLCAST_* events available.
 
 ### Event-Driven Architecture
 - **Event Registration**: Variables.lua defines castbar/misc events per WoW version; Callback.lua registers handlers via Ace3
@@ -55,10 +68,11 @@ Check WOW_PROJECT_ID constants early; use polyfills for deprecated APIs (GetSpel
 - **LibClassicCasterino/LibClassicDurations**: Classic-only; provides UnitCastingInfo wrappers
 
 ### Naming Conventions
-- Castbar instances: tbl keys are unit IDs (player, target, arena1, etc.)
-- Function prefixes: Opt* for options, Set* for applying settings, Get* for retrieval
-- Event handlers: Function named by UNIT_* event (e.g., OnUnitCastingStart)
-- Local API caching: Functions like GetSpellInfo cached as local variables at top of files for performance
+- Castbar instances: `Gnosis.castbars[unitID]` and `Gnosis.mstimers[unitID]`; unit IDs follow WoW standards (player, target, arena1, boss1, etc.)
+- Function prefixes: `Opt*` for options (OptCreateBasicTables, OptColor_Entry), `Set*` for applying settings (SetBarParams), `Get*` for retrieval
+- Event handlers: Named after triggering events (e.g., `OnUnitCastingStart`, `OnUnitSpellcastStart`)
+- Local API caching: All global APIs (GetSpellInfo, UnitCastingInfo, etc.) cached as local variables at file top for performance; this is critical in OnUpdate contexts
+- Table keys in config: `Gnosis.s[category][unit][setting]` structure (e.g., `Gnosis.s.cbconf.player.height`)
 
 ### Localization Pattern
 - Gnosis.L table populated per locale in Locale.lua using @localization directives
@@ -84,8 +98,17 @@ Check WOW_PROJECT_ID constants early; use polyfills for deprecated APIs (GetSpel
 - Test in target WoW version to verify API exists
 - Classic versions use LibClassicCasterino wrappers for casting info
 
-## Dependencies & Notes
-- Requires Ace3 library suite and LibSharedMedia for full functionality
-- SavedVariables: GnosisDB (account-wide), GnosisChar (per-character)
-- LoadOnDemand: 0 (always loads immediately)
+##**Required libraries**: Ace3 suite (AceAddon, AceEvent, AceConfig, AceGUI, etc.), LibSharedMedia-3.0, LibRangeCheck-3.0, LibDialog-1.0
+- **Classic-only libraries**: LibClassicCasterino (spell casting info wrapper), LibClassicDurations (debuff/buff tracking)
+- **SavedVariables**: GnosisDB (account-wide), GnosisChar (per-character), GnosisConfigs/GnosisCharConfig (separate config storage)
+- **LoadOnDemand**: 0 (addon loads at startup with UI; no lazy loading)
+- **Known Issues**:
+  - Cataclysm: LibDialog-1.0 broken (StaticPopup_DisplayedFrames no longer public); affects popup windows in options panel
+  - Classic: GetSpellInfo and related APIs unavailable; must use LibClassicCasterino wrappers
+  - BCC: UnitCastingInfo return value format differs; needs polyfill conversion (see Gnosis.lua lines 65-72)
+
+## Performance Notes
+- **OnUpdate frequency**: Gnosis.xml triggers OnUpdate every frame; bar progress updates happen here (Callback.lua)
+- **Casting info polling**: UnitCastingInfo called frequently; must be locally cached as `local UnitCastingInfo` for speed
+- **Settings propagation**: SetBarParams() called on any option change to immediately update running bar instances; avoid heavy operations in option setters
 - Known Issue (Cataclysm): LibDialog-1.0 broken; StaticPopup_DisplayedFrames is no longer public

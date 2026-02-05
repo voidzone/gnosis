@@ -2104,7 +2104,7 @@ function Gnosis:SetupCastbar(cb, bIsChannel, fCurTime)
 			startTime = fCurTime
 		end
 		if (issecretvalue(endTime)) then
-			endTime = fCurTime
+			return
 		end
 	end
 	
@@ -2355,7 +2355,7 @@ function Gnosis:SetupCastbar(cb, bIsChannel, fCurTime)
 end
 
 function Gnosis:activeBarColors(cb)
-	if (cb.notInterruptible) then
+	if (not (wowmainline and issecretvalue(cb.notInterruptible)) and cb.notInterruptible) then
 		cb.bar:SetStatusBarColor(unpack(cb.conf.colBarNI));
 		self:SetBorderColor(cb, cb.conf.colBorderNI, cb.conf.colBarBg);
 		if (cb.conf.bShowShield) then
