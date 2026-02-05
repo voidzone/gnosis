@@ -1596,10 +1596,14 @@ function Gnosis:CreateCastnameFromString(name, cb)
 	end
 
 	-- name
-	str = string_gsub(str, "name", name);
+	if (not issecretvalue(name)) then
+		str = string_gsub(str, "name", name);
+	else
+		str = string_gsub(str, "name", "");
+	end
 
 	-- unit name
-	if(uname) then
+	if(uname and (not issecretvalue(uname))) then
 		str = string_gsub(str, "who", uname);
 	else
 		str = string_gsub(str, "who", "");
