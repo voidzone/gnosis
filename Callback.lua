@@ -618,13 +618,17 @@ function Gnosis:UNIT_SPELLCAST_SENT(event, unit, target)
 	if (unit == "player") then
 		--set up variables for the range check
 		if target then
-			if target == UnitName("player") then
+			local nPlayer = UnitName("player")
+			local nTarget = UnitName("target")
+			local nFocus = UnitName("focus")
+			local nMouseover = UnitName("mouseover")
+			if not issecretvalue(nPlayer) and target == nPlayer then
 				rangeCheckTarget = "player"
-			elseif target == UnitName("target") then
+			elseif not issecretvalue(nTarget) and target == nTarget then
 				rangeCheckTarget = "target"
-			elseif target == UnitName("focus") then
+			elseif not issecretvalue(nFocus) and target == nFocus then
 				rangeCheckTarget = "focus"
-			elseif target == UnitName("mouseover") then
+			elseif not issecretvalue(nMouseover) and target == nMouseover then
 				rangeCheckTarget = "mouseover"
 			else
 				rangeCheckTarget = nil
@@ -633,7 +637,7 @@ function Gnosis:UNIT_SPELLCAST_SENT(event, unit, target)
 			rangeCheckTarget = nil
 		end
 	end
-	
+
 	-- grab unit class of target if possible
 	if (self.strLastTarget) then
 		local _, class = UnitClass(target);
@@ -643,8 +647,10 @@ function Gnosis:UNIT_SPELLCAST_SENT(event, unit, target)
 			self.strLastTargetClass = class;
 		else
 			-- try to get class from target and mouseover
-			local unit_ = (UnitName("target") == target) and "target" or
-				((UnitName("mouseover") == target) and "mouseover" or nil);
+			local nTarget = UnitName("target")
+			local nMouseover = UnitName("mouseover")
+			local unit_ = (not issecretvalue(nTarget) and nTarget == target) and "target" or
+				((not issecretvalue(nMouseover) and nMouseover == target) and "mouseover" or nil);
 
 			if (unit_ and UnitIsPlayer(unit_)) then
 				_, self.strLastTargetClass = UnitClass(unit_);
