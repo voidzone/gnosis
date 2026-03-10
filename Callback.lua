@@ -618,15 +618,20 @@ function Gnosis:UNIT_SPELLCAST_SENT(event, unit, target)
 	if (unit == "player") then
 		--set up variables for the range check
 		if target then
-			if target == UnitName("player") then
-				rangeCheckTarget = "player"
-			elseif target == UnitName("target") then
-				rangeCheckTarget = "target"
-			elseif target == UnitName("focus") then
-				rangeCheckTarget = "focus"
-			elseif target == UnitName("mouseover") then
-				rangeCheckTarget = "mouseover"
-			else
+			local success, result = pcall(function()
+				if target == UnitName("player") then
+					rangeCheckTarget = "player"
+				elseif target == UnitName("target") then
+					rangeCheckTarget = "target"
+				elseif target == UnitName("focus") then
+					rangeCheckTarget = "focus"
+				elseif target == UnitName("mouseover") then
+					rangeCheckTarget = "mouseover"
+				else
+					rangeCheckTarget = nil
+				end
+			end)
+			if not success then
 				rangeCheckTarget = nil
 			end
 		else
