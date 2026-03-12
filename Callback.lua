@@ -648,8 +648,8 @@ function Gnosis:UNIT_SPELLCAST_SENT(event, unit, target)
 			self.strLastTargetClass = class;
 		else
 			-- try to get class from target and mouseover
-			local unit_ = (UnitName("target") == target) and "target" or
-				((UnitName("mouseover") == target) and "mouseover" or nil);
+			local unit_ = (not issecretvalue(UnitName("target")) and UnitName("target") == target) and "target" or
+				((not issecretvalue(UnitName("mouseover")) and UnitName("mouseover") == target) and "mouseover" or nil);
 
 			if (unit_ and UnitIsPlayer(unit_)) then
 				_, self.strLastTargetClass = UnitClass(unit_);
