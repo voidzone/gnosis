@@ -649,7 +649,7 @@ function Gnosis:UNIT_SPELLCAST_SENT(event, unit, target)
 		else
 			-- try to get class from target and mouseover
 			local unit_
-			if wowmainline then
+			if (wowmainline) then
 				unit_ = (not issecretvalue(UnitName("target")) and UnitName("target") == target) and "target" or
 					((not issecretvalue(UnitName("mouseover")) and UnitName("mouseover") == target) and "mouseover" or nil);
 			else
