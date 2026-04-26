@@ -233,7 +233,7 @@ function Gnosis:StartupVariables()
 	local fCurTime = GetTime() * 1000;
 
 	self.ver = 5.43;
-	self.optver = 4.62;
+	self.optver = 4.63;
 	self.build = "@project-version@";
 	self.addonname = "Gnosis";
 	local strVer = string_format("v%.2f", self.ver);
