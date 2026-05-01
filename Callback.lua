@@ -767,8 +767,8 @@ function Gnosis:PLAYER_ENTER_COMBAT(event)
 	local _, _, offlowDmg, offhiDmg = UnitDamage("player");
 
 	-- dual wielding? if yes don't show timer
-	if (wowmailine) then
-		if (not (issecretvalue(offlowDmg) and issecrevalue(offhiDmg)) and offlowDmg and not self.bIsDruid and abs(offhiDmg-offlowDmg) > 0.1) then
+	if (wowmainline) then
+		if (offlowDmg and not (issecretvalue(offlowDmg) or issecretvalue(offhiDmg)) and not self.bIsDruid and abs(offhiDmg-offlowDmg) > 0.1) then
 			self.bSwingBar = false;
 			return;
 		else
