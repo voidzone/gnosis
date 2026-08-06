@@ -23,6 +23,7 @@ local GetSpellInfo = GetSpellInfo or function(spellID)
 	  return spellInfo.name, nil, spellInfo.iconID, spellInfo.castTime, spellInfo.minRange, spellInfo.maxRange, spellInfo.spellID, spellInfo.originalIconID;
 	end
 end
+local PlayerCastingBarFrame = PlayerCastingBarFrame or CastingBarFrame
 
 -- local variables
 local _;
@@ -256,12 +257,9 @@ end
 function Gnosis:HideBlizzardCastbar(status)
 	if (status) then	-- hide castbar
 		for key, value in pairs(self.tBlizzCastbar) do
-			if((wowmainline or wowbcc or wowmc) and PlayerCastingBarFrame:IsEventRegistered(value)) then
+			if(PlayerCastingBarFrame:IsEventRegistered(value)) then
 				table_insert(self.blizzcastbar, value);
 				PlayerCastingBarFrame:UnregisterEvent(value);
-			elseif(not (wowmainline or wowbcc or wowmc) and CastingBarFrame:IsEventRegistered(value)) then
-				table_insert(self.blizzcastbar, value);
-				CastingBarFrame:UnregisterEvent(value);
 			end
 		end
 
@@ -276,11 +274,7 @@ function Gnosis:HideBlizzardCastbar(status)
 		end
 	else	-- restore castbar events, it might not actually enable the blizzard castbar if another addon hides it
 		for key, value in pairs(self.blizzcastbar) do
-			if (wowmainline or wowbcc or wowmc) then
-				PlayerCastingBarFrame:RegisterEvent(value);
-			else
-				CastingBarFrame:RegisterEvent(value);
-			end
+			PlayerCastingBarFrame:RegisterEvent(value);
 		end
 
 		if (#self.blizzcastbar > 0) then
