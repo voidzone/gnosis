@@ -1245,6 +1245,9 @@ function Gnosis:SetupSwingBar(cb, spell, icon, fCurTime, bMeleeSwing)
 	end
 
 	cb.channel = false;
+	if (issecretvalue(UnitAttackSpeed("player")) or issecretvalue(UnitRangedDamage("player"))) then
+		return;
+	end
 	cb.duration = (bMeleeSwing and UnitAttackSpeed("player") or UnitRangedDamage("player")) * 1000;
 	cb.endTime = fCurTime + cb.duration;
 	cb.icon:SetTexture(icon);
