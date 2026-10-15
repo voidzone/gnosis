@@ -103,6 +103,60 @@ if (wowclassic and Gnosis.libcldur) then
 	end
 end
 
+-- secret value helpers (see Gnosis.lua)
+local IsSecret = Gnosis.IsSecret;
+local IsPresent = Gnosis.IsPresent;
+local CanAccessTable = Gnosis.CanAccessTable;
+
+local function AnySecret(...)
+	for i = 1, select("#", ...) do
+		if (IsSecret((select(i, ...)))) then
+			return true;
+		end
+	end
+	return false;
+end
+
+-- values differ? secret values cannot be compared, treat them as changed
+local function Differs(a, b)
+	if (IsSecret(a) or IsSecret(b)) then
+		return true;
+	end
+	return a ~= b;
+end
+
+-- retail: global UnitAura was removed, unpack aura data in the same order (AuraUtil.UnpackAuraData)
+-- without indexing secret tables
+local function UnpackAuraData(aura)
+	if (not IsPresent(aura) or IsSecret(aura) or not CanAccessTable(aura)) then
+		return nil;
+	end
+
+	local points, eff1, eff2, eff3 = aura.points;
+	if (IsPresent(points) and not IsSecret(points) and CanAccessTable(points)) then
+		eff1, eff2, eff3 = points[1], points[2], points[3];
+	end
+
+	return aura.name, aura.icon, aura.applications, aura.dispelName, aura.duration,
+		aura.expirationTime, aura.sourceUnit, aura.isStealable, aura.nameplateShowPersonal,
+		aura.spellId, aura.canApplyAura, aura.isBossAura, aura.isFromPlayerOrPlayerPet,
+		aura.nameplateShowAll, aura.timeMod, eff1, eff2, eff3;
+end
+
+if (not UnitAura and C_UnitAuras and C_UnitAuras.GetAuraDataByIndex) then
+	UnitAura = function(unit, index, filter)
+		return UnpackAuraData(C_UnitAuras.GetAuraDataByIndex(unit, index, filter));
+	end
+
+	AuraUtil_FindAuraByName = function(spellname, unit, filter)
+		-- lookup by name requires a non secret spell aura
+		if (not spellname or C_Secrets.ShouldSpellAuraBeSecret(spellname)) then
+			return nil;
+		end
+		return UnpackAuraData(C_UnitAuras.GetAuraDataBySpellName(unit, spellname, filter));
+	end
+end
+
 if (wowclassic and Gnosis.libclcno) then
 	UnitCastingInfo = function(unit)
 		return Gnosis.libclcno:UnitCastingInfo(unit);
@@ -282,10 +336,66 @@ local function set_times(timer, ti, dur, fin, ischannel)
 	end
 end
 
+-- secret cooldowns (retail), timer bar is driven by the duration object (ti.durObj),
+-- dur/fin are placeholders only
+local function set_secret_times(timer, ti, durObj)
+	if (timer.brange) then
+		-- value ranges cannot be checked against secret values
+		return;
+	end
+
+	ti.ok = true;
+	set_times(timer, ti, 0, 0, true);
+	if (ti.ok and not ti.bSpecial) then
+		ti.durObj = durObj;
+	end
+end
+
+-- spell cooldown with secret values, isActive and isOnGCD are never secret
+local function Timers_SpellCDSecret(timer, ti)
+	local info = C_Spell.GetSpellCooldown(timer.spell);
+	if (IsPresent(info) and not IsSecret(info) and info.isActive and not info.isOnGCD) then
+		local durObj = C_Spell.GetSpellCooldownDuration(timer.spell, true);	-- ignore gcd
+		if (IsPresent(durObj) and not IsSecret(durObj)) then
+			ti.cname = timer.spell;
+			ti.icon = timer.icon or select(3, GetSpellInfo(timer.spell));
+			set_secret_times(timer, ti, durObj);
+		end
+	elseif (timer.bNot) then
+		ti.cname = timer.spell;
+		ti.icon = timer.icon or select(3, GetSpellInfo(timer.spell));
+		set_not(ti);
+	end
+end
+
+-- spell recharge with secret values, isActive is never secret (charge count unavailable)
+local function Timers_SpellRechargeSecret(timer, ti)
+	if (timer.chargecnt) then
+		return;
+	end
+
+	local info = C_Spell.GetSpellCharges(timer.spell);
+	if (IsPresent(info) and not IsSecret(info) and info.isActive) then
+		local durObj = C_Spell.GetSpellChargeDuration(timer.spell);
+		if (IsPresent(durObj) and not IsSecret(durObj)) then
+			ti.cname = timer.spell;
+			ti.icon = timer.icon;
+			set_secret_times(timer, ti, durObj);
+		end
+	elseif (timer.bNot) then
+		ti.cname = timer.spell;
+		ti.icon = timer.icon;
+		set_not(ti);
+	end
+end
+
 function Gnosis:Timers_Spell(bar, timer, ti)
 	-- cast
 	local spell, _, icon, s, d, _, _, notInterruptible = UnitCastingInfo(timer.unit);
-	if(d and d > 0) then
+	if (AnySecret(spell, s, d, notInterruptible)) then
+		-- secret cast data cannot be evaluated
+		return;
+	elseif(d and d > 0) then
 		if(timer.spell == "all" or timer.spell == "any" or timer.spell == spell) then
 			ti.cname = spell;
 			ti.icon = icon;
@@ -302,7 +412,9 @@ function Gnosis:Timers_Spell(bar, timer, ti)
 		end
 	else
 		spell, _, icon, s, d, _, _, notInterruptible = UnitChannelInfo(timer.unit);
-		if(d and d > 0) then
+		if (AnySecret(spell, s, d, notInterruptible)) then
+			return;
+		elseif(d and d > 0) then
 			if(timer.spell == "all" or timer.spell == "any" or timer.spell == spell) then
 				ti.cname = spell;
 				ti.icon = icon;
@@ -325,6 +437,10 @@ function Gnosis:Timers_SpellCD(bar, timer, ti)
 	-- cooldown, player only
 	ti.unit = "player";
 	local s, d = GetSpellCooldown(timer.spell);
+	if (AnySecret(s, d)) then
+		Timers_SpellCDSecret(timer, ti);
+		return;
+	end
 
 	local dur, fin;
 	local cd_info = Gnosis.timer_cds[timer.spell];
@@ -390,6 +506,108 @@ function Gnosis:Timers_Counter(bar, timer, ti)
 	end
 end
 
+-- values returned by GetAura() for a found aura
+local function AuraValues(timer, ic, sta, d, s, eff1, eff2, eff3)
+	if (timer.auraeffect3) then
+		if (eff3 and eff3 > 0) then
+			return ic, sta, timer.auraeffect3, eff3, eff3, true;
+		end
+	elseif (timer.auraeffect2) then
+		if (eff2 and eff2 > 0) then
+			return ic, sta, timer.auraeffect2, eff2, eff2, true;
+		end
+	elseif (timer.auraeffect1) then
+		if (eff1 and eff1 > 0) then
+			return ic, sta, timer.auraeffect1, eff1, eff1, true;
+		end
+	elseif (timer.aurastacks) then
+		if (sta and sta > 0) then
+			return ic, sta, timer.aurastacks, sta, eff1, true;
+		end
+	else
+		-- timer bar
+		return ic, sta, d, s, nil, false;
+	end
+
+	-- nothing to return
+	return ic;
+end
+
+-- retail: aura data contains secret values, look up aura by spell id or name (matched by the client)
+-- timer bars get a duration object as 7th return value (d and s are placeholders then),
+-- effect values and stacks are not available
+local function GetAuraSecret(timer, unit)
+	local spell = timer.spellid or timer.spell;
+	if (not spell or C_Secrets.ShouldSpellAuraBeSecret(spell)) then
+		-- auras of secret spells cannot be looked up
+		return;
+	end
+
+	local aura;
+	if (timer.spellid) then
+		aura = C_UnitAuras.GetUnitAuraBySpellID(unit, timer.spellid);
+	else
+		aura = C_UnitAuras.GetAuraDataBySpellName(unit, timer.spell, timer.filter);
+	end
+	if (not IsPresent(aura) or IsSecret(aura) or not CanAccessTable(aura)) then
+		return;
+	end
+
+	local id = aura.auraInstanceID;
+	if (IsSecret(id)) then
+		return;
+	end
+
+	-- lookup by spell id ignores the filter, check the found aura instance
+	if (timer.spellid and timer.filter) then
+		local isFiltered = C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, id, timer.filter);
+		if (IsSecret(isFiltered) or isFiltered) then
+			return;
+		end
+	end
+
+	-- non secret name and icon
+	local ic = aura.icon;
+	if (IsSecret(ic)) then
+		ic = timer.icon or select(3, GetSpellInfo(spell));
+	end
+	if (timer.spellid) then
+		local name = aura.name;
+		if (IsSecret(name)) then
+			name = GetSpellInfo(timer.spellid);
+		end
+		timer.spell = name;
+	end
+
+	local sta, d, s = aura.applications, aura.duration, aura.expirationTime;
+	local points, eff1, eff2, eff3 = aura.points;
+	if (IsPresent(points) and not IsSecret(points) and CanAccessTable(points)) then
+		eff1, eff2, eff3 = points[1], points[2], points[3];
+	end
+
+	if (not AnySecret(sta, d, s, eff1, eff2, eff3)) then
+		return AuraValues(timer, ic, sta, d, s, eff1, eff2, eff3);
+	end
+
+	-- effect values and stacks are secret
+	if (timer.auraeffect1 or timer.auraeffect2 or timer.auraeffect3 or timer.aurastacks) then
+		return ic;
+	end
+
+	-- static aura (no expiration time)?
+	local hasExpiration = C_UnitAuras.DoesAuraHaveExpirationTime(unit, id);
+	if (not IsSecret(hasExpiration) and not hasExpiration) then
+		return ic, nil, 0, 0, nil, false;
+	end
+
+	local durObj = C_UnitAuras.GetAuraDuration(unit, id);
+	if (not IsPresent(durObj) or IsSecret(durObj)) then
+		return ic;
+	end
+
+	return ic, nil, 0, 0, nil, false, durObj;
+end
+
 local function GetAura(timer, unit)
 	if (timer.spellid) then
 		-- aura id
@@ -400,32 +618,12 @@ local function GetAura(timer, unit)
 			name, ic, sta, _, d, s, _, _, _, id, _, _, _, _, _, eff1, eff2, eff3 =
 				UnitAura(unit, i, timer.filter);
 
-			if (id and id == timer.spellid) then
+			-- secret aura data cannot be matched or evaluated by Gnosis
+			if (AnySecret(name, sta, d, s, id, eff1, eff2, eff3)) then
+				return GetAuraSecret(timer, unit);
+			elseif (id and id == timer.spellid) then
 				timer.spell = name;
-
-				if (timer.auraeffect3) then
-					if (eff3 and eff3 > 0) then
-						return ic, sta, timer.auraeffect3, eff3, eff3, true;
-					end
-				elseif (timer.auraeffect2) then
-					if (eff2 and eff2 > 0) then
-						return ic, sta, timer.auraeffect2, eff2, eff2, true;
-					end
-				elseif (timer.auraeffect1) then
-					if (eff1 and eff1 > 0) then
-						return ic, sta, timer.auraeffect1, eff1, eff1, true;
-					end
-				elseif (timer.aurastacks) then
-					if (sta and sta > 0) then
-						return ic, sta, timer.aurastacks, sta, eff1, true;
-					end
-				else
-					-- timer bar
-					return ic, sta, d, s, eff, false;
-				end
-
-				-- nothing to return
-				return ic;
+				return AuraValues(timer, ic, sta, d, s, eff1, eff2, eff3);
 			end
 
 			i = i + 1;
@@ -437,38 +635,26 @@ local function GetAura(timer, unit)
 		local _, ic, sta, _, d, s, _, _, _, _, _, _, _, _, _, eff1, eff2, eff3 =
 			AuraUtil_FindAuraByName(timer.spell, unit, timer.filter);
 
-		if (timer.auraeffect3) then
-			if (eff3 and eff3 > 0) then
-				return ic, sta, timer.auraeffect3, eff3, eff3, true;
-			end
-		elseif (timer.auraeffect2) then
-			if (eff2 and eff2 > 0) then
-				return ic, sta, timer.auraeffect2, eff2, eff2, true;
-			end
-		elseif (timer.auraeffect1) then
-			if (eff1 and eff1 > 0) then
-				return ic, sta, timer.auraeffect1, eff1, eff1, true;
-			end
-		elseif (timer.aurastacks) then
-			if (sta and sta > 0) then
-				return ic, sta, timer.aurastacks, sta, eff1, true;
-			end
-		else
-			-- timer bar
-			return ic, sta, d, s, eff, false;
+		-- secret aura data cannot be evaluated by Gnosis
+		if (AnySecret(ic, sta, d, s, eff1, eff2, eff3)) then
+			return GetAuraSecret(timer, unit);
 		end
 
-		-- nothing to return
-		return ic;
+		return AuraValues(timer, ic, sta, d, s, eff1, eff2, eff3);
 	end
 end
 
 function Gnosis:Timers_Aura(bar, timer, ti)
 	-- aura == buff or debuff (== hot or dot)
 	ti.unit = timer.unit;
-	local ic, sta, d, s, effect, isspecial = GetAura(timer, timer.unit);
+	local ic, sta, d, s, effect, isspecial, durObj = GetAura(timer, timer.unit);
 
-	if (s) then
+	if (durObj) then
+		-- secret aura duration (retail)
+		ti.cname = timer.spell;
+		ti.icon = ic;
+		set_secret_times(timer, ti, durObj);
+	elseif (s) then
 		ti.cname = timer.spell;
 		ti.stacks = (sta and sta > 0) and sta or nil;
 		ti.icon = ic;
@@ -524,14 +710,14 @@ function Gnosis:Timers_GroupAura(bar, timer, ti)
 	ti.unit = nil;
 
 	-- scan current group for aura, also scan existing pets
-	local _, ic, sta, d, s, effect, isspecial;
+	local _, ic, sta, d, s, effect, isspecial, durObj;
 
 	local n = GetNumGroupMembers();
 	if (IsInRaid() and n >= 2) then
 		-- scan raid
 		for i = 1, n do
 			local curunit = "raid" .. i;
-			ic, sta, d, s, effect, isspecial = GetAura(timer, curunit);
+			ic, sta, d, s, effect, isspecial, durObj = GetAura(timer, curunit);
 
 			if (s) then
 				ti.unit = curunit;
@@ -540,7 +726,7 @@ function Gnosis:Timers_GroupAura(bar, timer, ti)
 
 			curunit = "raidpet" .. i;
 			if (UnitExists(curunit)) then
-				ic, sta, d, s, effect, isspecial = GetAura(timer, curunit);
+				ic, sta, d, s, effect, isspecial, durObj = GetAura(timer, curunit);
 
 				if (s) then
 					ti.unit = curunit;
@@ -550,13 +736,13 @@ function Gnosis:Timers_GroupAura(bar, timer, ti)
 		end
 	elseif (n >= 2) then
 		-- scan player and group members
-		ic, sta, d, s, effect, isspecial = GetAura(timer, "player");
+		ic, sta, d, s, effect, isspecial, durObj = GetAura(timer, "player");
 
 		if (s) then
 			ti.unit = "player";
 		else
 			if (UnitExists("playerpet")) then
-				ic, sta, d, s, effect, isspecial = GetAura(timer, "playerpet");
+				ic, sta, d, s, effect, isspecial, durObj = GetAura(timer, "playerpet");
 			end
 
 			if (s) then
@@ -564,7 +750,7 @@ function Gnosis:Timers_GroupAura(bar, timer, ti)
 			else
 				for i = 1, (n - 1) do
 					local curunit = "party" .. i;
-					ic, sta, d, s, effect, isspecial = GetAura(timer, curunit);
+					ic, sta, d, s, effect, isspecial, durObj = GetAura(timer, curunit);
 
 					if (s) then
 						ti.unit = curunit;
@@ -573,7 +759,7 @@ function Gnosis:Timers_GroupAura(bar, timer, ti)
 
 					curunit = "partypet" .. i;
 					if (UnitExists(curunit)) then
-						ic, sta, d, s, effect, isspecial = GetAura(timer, curunit);
+						ic, sta, d, s, effect, isspecial, durObj = GetAura(timer, curunit);
 
 						if (s) then
 							ti.unit = curunit;
@@ -585,13 +771,13 @@ function Gnosis:Timers_GroupAura(bar, timer, ti)
 		end
 	else
 		-- scan player (player not in group)
-		ic, sta, d, s, effect, isspecial = GetAura(timer, "player");
+		ic, sta, d, s, effect, isspecial, durObj = GetAura(timer, "player");
 
 		if (s) then
 			ti.unit = "player";
 		else
 			if (UnitExists("playerpet")) then
-				ic, sta, d, s, effect, isspecial = GetAura(timer, "playerpet");
+				ic, sta, d, s, effect, isspecial, durObj = GetAura(timer, "playerpet");
 
 				if (s) then
 					ti.unit = "playerpet";
@@ -606,7 +792,10 @@ function Gnosis:Timers_GroupAura(bar, timer, ti)
 		ti.effect = effect;
 		ti.icon = ic;
 
-		if (isspecial) then
+		if (durObj) then
+			-- secret aura duration (retail)
+			set_secret_times(timer, ti, durObj);
+		elseif (isspecial) then
 			ti.unit = timer.unit;
 			ti.bSpecial = true;
 
@@ -660,7 +849,10 @@ function Gnosis:Timers_SpellRecharge(bar, timer, ti)
 
 	local curcharges, maxcharges, cdstart, cddur = GetSpellCharges(timer.spell);
 
-	if (curcharges == nil) then
+	if (AnySecret(curcharges, maxcharges, cdstart, cddur)) then
+		Timers_SpellRechargeSecret(timer, ti);
+		return;
+	elseif (curcharges == nil) then
 		return;
 	end
 
@@ -716,7 +908,9 @@ function Gnosis:Timers_ItemCD(bar, timer, ti)
 	if (timer.iid) then
 		ti.unit = "player";
 		local s, d = GetItemCooldown(timer.iid);
-		if (d and d > 1.5) then	-- duration greater than global cd
+		if (AnySecret(s, d)) then
+			return;
+		elseif (d and d > 1.5) then	-- duration greater than global cd
 			ti.cname = timer.iname;
 			ti.icon = timer.itex;
 			local dur, fin = d, s+d;
@@ -774,7 +968,9 @@ function Gnosis:Timers_RuneCD(bar, timer, ti)
 
 	-- check cooldown
 	local s, d, rdy = GetRuneCooldown(timer.spell);
-	if (s and (not rdy) and (s+d) >= GetTime()) then
+	if (AnySecret(s, d, rdy)) then
+		return;
+	elseif (s and (not rdy) and (s+d) >= GetTime()) then
 		if (rune) then
 			ti.cname = Gnosis.tRuneName[rune];
 			ti.icon = Gnosis.tRuneTexture[rune];
@@ -806,7 +1002,9 @@ function Gnosis:Timers_TotemDuration(bar, timer, ti)
 	-- totem duration
 	ti.unit = "player";
 	local bExist, name, s, d, icon = GetTotemInfo(timer.spell);
-	if(bExist and name and s and s > 0) then
+	if (AnySecret(bExist, name, s, d)) then
+		return;
+	elseif(bExist and name and s and s > 0) then
 		ti.cname = name;
 		ti.icon = icon;
 		local dur, fin = d, s+d;
@@ -963,7 +1161,9 @@ end
 function Gnosis:Timers_Power(bar, timer, ti)
 	-- mana, rage, focus, energy
 	local s, d = UnitPower(timer.unit), UnitPowerMax(timer.unit);
-	if(d and d > 0) then
+	if (AnySecret(s, d)) then
+		return;
+	elseif (d and d > 0) then
 		local pts = select(2, UnitPowerType(timer.unit));
 		ti.cname = pts and _G[pts] or "";
 		ti.unit = timer.unit;
@@ -988,7 +1188,9 @@ function Gnosis:Timers_PowerGeneric(bar, timer, ti)
 	-- combo points (6.0)
 	local idx = timer.type - 2000;
 	local s, d = UnitPower(timer.unit, idx, timer.resource_decimals), UnitPowerMax(timer.unit, idx, timer.resource_decimals);
-	if (d and d > 0) then
+	if (AnySecret(s, d)) then
+		return;
+	elseif (d and d > 0) then
 		-- values including decimals?
 		if (timer.resource_decimals) then
 			s = s / 10;
@@ -1072,7 +1274,9 @@ end
 
 function Gnosis:Timers_Health(bar, timer, ti)
 	local s, d = UnitHealth(timer.unit), UnitHealthMax(timer.unit);
-	if(d and d > 0) then
+	if (AnySecret(s, d)) then
+		return;
+	elseif (d and d > 0) then
 		ti.cname = _G["HEALTH"];
 		ti.unit = timer.unit;
 		ti.bSpecial = true;
@@ -1092,7 +1296,9 @@ end
 
 function Gnosis:Timers_PowerAlternate(bar, timer, ti)
 	local s, d = UnitPower(timer.unit, ALTERNATE_POWER_INDEX), UnitPowerMax(timer.unit, ALTERNATE_POWER_INDEX);
-	if(d and d > 0) then
+	if (AnySecret(s, d)) then
+		return;
+	elseif (d and d > 0) then
 		local altpowerinfo_cname = select(11, UnitAlternatePowerInfo(timer.unit));
 		ti.cname = altpowerinfo_cname or "";
 		ti.icon = UnitAlternatePowerTextureInfo(timer.unit, 2);
@@ -1114,7 +1320,9 @@ end
 
 function Gnosis:Timers_IncomingHealth(bar, timer, ti)
 	local s, d = UnitGetIncomingHeals(timer.unit), UnitHealthMax(timer.unit);
-	if(s and d and d > 0) then
+	if (AnySecret(s, d)) then
+		return;
+	elseif (s and d and d > 0) then
 		ti.cname = "";
 		ti.unit = timer.unit;
 		ti.bSpecial = true;
@@ -1134,7 +1342,9 @@ end
 
 function Gnosis:Timers_TargetThreat(bar, timer, ti)
 	local _, status, pct, _, val = UnitDetailedThreatSituation(timer.unit, "target");
-	if(status and pct > 0) then
+	if (AnySecret(status, pct, val)) then
+		return;
+	elseif (status and pct > 0) then
 		val = val / 100;
 		ti.cname = "";
 		ti.unit = timer.unit;
@@ -1182,6 +1392,10 @@ end
 
 function Gnosis:Timers_UnitName(bar, timer, ti)
 	local n = UnitName(timer.unit);
+	if (IsSecret(n)) then
+		-- secret unit names cannot be compared
+		return;
+	end
 
 	if (n and (timer.spell == "any" or n == timer.spell)) then
 		ti.cname = n;
@@ -1201,6 +1415,9 @@ end
 
 function Gnosis:Timers_Npc(bar, timer, ti)
 	local guid = UnitGUID(timer.unit);
+	if (IsSecret(guid)) then
+		return;
+	end
 
 	if (guid) then
 		local _, _, _, _, _, npc_id, _ = string_split("-", guid);
@@ -2103,8 +2320,8 @@ function Gnosis:CheckCounter(v, ti)
 		end
 	end
 
-	-- start counter (copying timer duration)
-	if (v.countcpy and ti) then
+	-- start counter (copying timer duration, not possible for secret durations)
+	if (v.countcpy and ti and not ti.durObj) then
 		if (self.counters[v.countcpy] == nil) then
 			self.counters[v.countcpy] = { starttime = (ti.fin - ti.dur) / 1000, endtime = ti.fin / 1000 };
 		elseif (self.counters[v.countcpy].endtime < GetTime()) then
@@ -2143,6 +2360,7 @@ function Gnosis:ScanTimerbar(bar, fCurTime)
 	local relaxed_and = nil;
 	local boolop_complete = false;
 	SelectedTimerInfo.duration = nil;
+	SelectedTimerInfo.durObj = nil;
 	for k, v in ipairs(bar.timers) do
 		if (boolop_complete) then
 			-- unmark relaxed and request
@@ -2219,6 +2437,10 @@ function Gnosis:ScanTimerbar(bar, fCurTime)
 							bTakeover = true;
 							SelectedTimerInfo.bSpecial = TimerInfo.bSpecial;
 							SelectedTimerInfo.valIsStatic = TimerInfo.valIsStatic;
+						elseif (TimerInfo.durObj or SelectedTimerInfo.durObj) then
+							-- secret durations cannot be sorted, keep first match
+							SelectedTimerInfo.bSpecial = false;
+							bTakeover = not SelectedTimerInfo.duration;
 						else
 							-- sorting
 							SelectedTimerInfo.bSpecial = false;
@@ -2245,6 +2467,7 @@ function Gnosis:ScanTimerbar(bar, fCurTime)
 							SelectedTimerInfo.tiunit = TimerInfo.unit;
 							SelectedTimerInfo.bChannel = TimerInfo.bChannel;
 							SelectedTimerInfo.notInterruptible = TimerInfo.notInterruptible;
+							SelectedTimerInfo.durObj = TimerInfo.durObj;
 							SelectedTimerInfo.curtimer = v;
 						end
 
@@ -2284,14 +2507,15 @@ function Gnosis:ScanTimerbar(bar, fCurTime)
 
 		-- only minor changes to bar necessary?
 		if (bar.bActive and bar.timer_id == SelectedTimerInfo.curtimer.id and
-			bar.castname == SelectedTimerInfo.castname and bar.notInterruptible == SelectedTimerInfo.notInterruptible) then
+			bar.castname == SelectedTimerInfo.castname and bar.notInterruptible == SelectedTimerInfo.notInterruptible and
+			(not bar.bSecret) == (not SelectedTimerInfo.durObj)) then
 
 			local dur = bar.dur and bar.dur or bar.duration;
 			local bRecalcTick = (dur ~= SelectedTimerInfo.duration);
 
 			-- redo name text
 				-- stacks; effect value and name of targeted unit (added in 4.01)
-			if (bar.stacks ~= SelectedTimerInfo.stacks or bar.effect ~= SelectedTimerInfo.effect or SelectedTimerInfo.tiunit ~= bar.tiUnit or bar.tiUnitName ~= UnitName(bar.tiUnit)) then
+			if (bar.stacks ~= SelectedTimerInfo.stacks or bar.effect ~= SelectedTimerInfo.effect or SelectedTimerInfo.tiunit ~= bar.tiUnit or Differs(bar.tiUnitName, UnitName(bar.tiUnit))) then
 				bar.stacks = SelectedTimerInfo.stacks;
 				bar.effect = SelectedTimerInfo.effect;
 				bar.tiUnit = SelectedTimerInfo.tiunit;
@@ -2311,6 +2535,12 @@ function Gnosis:ScanTimerbar(bar, fCurTime)
 					end
 				end
 
+				return;
+			end
+
+			-- secret duration, hand over current duration object (Bars.lua)
+			if (SelectedTimerInfo.durObj) then
+				self:RefreshTimerbarSecret(bar, SelectedTimerInfo.durObj);
 				return;
 			end
 

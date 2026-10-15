@@ -54,6 +54,10 @@ local select = select;
 -- local variables
 local _;
 
+-- secret value helpers (see Gnosis.lua)
+local IsSecret = Gnosis.IsSecret;
+local IsPresent = Gnosis.IsPresent;
+
 -- mainline or classic
 local wowmainline = (WOW_PROJECT_ID == WOW_PROJECT_MAINLINE);
 local wowclassic = (WOW_PROJECT_ID == WOW_PROJECT_CLASSIC);
@@ -307,7 +311,10 @@ function Gnosis:ScanUnit(unit, nfo)
 	local name, displayName, texture, startTime, endTime, isTradeSkill, id, notInterruptible;
 
 	name, displayName, texture, startTime, endTime, isTradeSkill, id, notInterruptible = UnitCastingInfo(unit);
-	if(name) then
+	if (IsSecret(name) or IsSecret(startTime)) then
+		self:ScanUnitSecret(unit, nfo, false);
+		return;
+	elseif(name) then
 		-- casting
 		if(nfo.name and nfo.name == name and nfo.startTime == startTime) then
 			-- not interruptible?
@@ -331,6 +338,7 @@ function Gnosis:ScanUnit(unit, nfo)
 			end
 
 			nfo.name = name;
+			nfo.bSecret = nil;
 			nfo.isChannel = false;
 			nfo.startTime = startTime;
 			nfo.endTime = endTime;
@@ -343,7 +351,10 @@ function Gnosis:ScanUnit(unit, nfo)
 	end
 
 	name, displayName, texture, startTime, endTime, isTradeSkill, notInterruptible = UnitChannelInfo(unit);
-	if(name) then
+	if (IsSecret(name) or IsSecret(startTime)) then
+		self:ScanUnitSecret(unit, nfo, true);
+		return;
+	elseif(name) then
 		-- channeling
 		if(nfo.name and nfo.name == name and nfo.endTime == endTime) then
 			-- not interruptible?
@@ -367,6 +378,7 @@ function Gnosis:ScanUnit(unit, nfo)
 			end
 
 			nfo.name = name;
+			nfo.bSecret = nil;
 			nfo.isChannel = true;
 			nfo.startTime = startTime;
 			nfo.endTime = endTime;
@@ -387,6 +399,38 @@ function Gnosis:ScanUnit(unit, nfo)
 		end
 
 		nfo.name = nil;
+		nfo.bSecret = nil;
+	end
+end
+
+-- secret cast data cannot be compared, only track whether unit is casting or channeling
+-- (a new cast directly following another cast of the same type will not be detected)
+function Gnosis:ScanUnitSecret(unit, nfo, bIsChannel)
+	if (nfo.bSecret and nfo.isChannel == bIsChannel) then
+		-- still casting
+		return;
+	end
+
+	if (nfo.name) then
+		if (nfo.isChannel) then
+			self:UNIT_SPELLCAST_CHANNEL_STOP("UNIT_SPELLCAST_CHANNEL_STOP", unit);
+		else
+			self:UNIT_SPELLCAST_STOP("UNIT_SPELLCAST_STOP", unit);
+		end
+	end
+
+	-- store non secret placeholders only
+	nfo.name = true;
+	nfo.bSecret = true;
+	nfo.isChannel = bIsChannel;
+	nfo.startTime = nil;
+	nfo.endTime = nil;
+	nfo.notInt = nil;
+
+	if (bIsChannel) then
+		self:UNIT_SPELLCAST_CHANNEL_START("UNIT_SPELLCAST_CHANNEL_START", unit);
+	else
+		self:UNIT_SPELLCAST_START("UNIT_SPELLCAST_START", unit);
 	end
 end
 
@@ -433,13 +477,17 @@ function Gnosis:FindCBNext(unit)
 end
 
 function Gnosis:FindGCDBars(spell, fCurTime, spellid)
-	if ( wowmainline ) then
-		return
-	end
 	-- using spell id
 	local start, cd = GetSpellCooldown(spellid);
 	-- using "Global Cooldown" spell
 	--local start, cd = GetSpellCooldown(61304);
+
+	if (IsSecret(start) or IsSecret(cd)) then
+		-- secret cooldowns (retail), let the client drive gcd bars
+		self:FindGCDBarsSecret(spell, fCurTime, spellid);
+		return;
+	end
+
 	if (not start or not(cd > 0 and cd <= 1.5)) then
 		return;
 	end
@@ -504,7 +552,20 @@ function Gnosis:FontString(bar, height)
 	return fs;
 end
 
+local BACKDROP_BORDER_PIECES = {
+	"TopLeftCorner", "TopRightCorner", "BottomLeftCorner", "BottomRightCorner",
+	"TopEdge", "BottomEdge", "LeftEdge", "RightEdge",
+};
+
+local function BorderTextures(bar)
+	return bar.btop, bar.bbottom, bar.bleft, bar.bright, bar.bicon;
+end
+
 function Gnosis:SetBorderColor(bar, colBorder, colBarBg, bHideIconBorder)
+	-- reset vertex colors possibly set by SetBorderColorFromBoolean
+	for _, tex in ipairs({ BorderTextures(bar) }) do
+		tex:SetVertexColor(1, 1, 1, 1);
+	end
 	bar.btop:SetColorTexture(unpack(colBorder));
 	bar.bbottom:SetColorTexture(unpack(colBorder));
 	bar.bleft:SetColorTexture(unpack(colBorder));
@@ -515,6 +576,23 @@ function Gnosis:SetBorderColor(bar, colBorder, colBarBg, bHideIconBorder)
 		bar.bicon:SetColorTexture(0, 0, 0, 0);
 	else
 		bar.bicon:SetColorTexture(unpack(colBorder));
+	end
+end
+
+-- border color selected by a (secret) boolean, white color textures tinted by the client
+function Gnosis:SetBorderColorFromBoolean(bar, value, colTrue, colFalse, colBarBg)
+	local cTrue, cFalse = CreateColor(unpack(colTrue)), CreateColor(unpack(colFalse));
+	for _, tex in ipairs({ BorderTextures(bar) }) do
+		tex:SetColorTexture(1, 1, 1, 1);
+		tex:SetVertexColorFromBoolean(value, cTrue, cFalse);
+	end
+	bar.bbg:SetColorTexture(unpack(colBarBg));
+	-- backdrop border pieces (BackdropTemplateMixin)
+	for _, piece in ipairs(BACKDROP_BORDER_PIECES) do
+		local region = bar.bdframe[piece];
+		if (region) then
+			region:SetVertexColorFromBoolean(value, cTrue, cFalse);
+		end
 	end
 end
 
@@ -566,6 +644,15 @@ function Gnosis:SetBarParams(name, cfgtab, bartab)
 
 	bar.bar:ClearAllPoints();
 	bar.bar:SetAllPoints(bar);
+
+	-- client driven statusbar for secret casts, same look as Gnosis' own statusbar
+	if (bar.sbar) then
+		bar.sbar:SetStatusBarTexture(self.lsm:Fetch("statusbar", tParams.bartexture));
+		bar.sbar:GetStatusBarTexture():SetDrawLayer("BORDER");
+		bar.sbar:SetStatusBarColor(unpack(tParams.colBar));
+		bar.sbar:SetOrientation(tParams.orient == 2 and "VERTICAL" or "HORIZONTAL");
+		bar.sbar:SetReverseFill(tParams.bInvDir and true or false);
+	end
 
 	-- bar border
 	local bsize, bnsize = tParams.border, -tParams.border;
@@ -798,6 +885,13 @@ function Gnosis:SetBarParams(name, cfgtab, bartab)
 		bar:SetFrameStrata(tParams.strata);
 	end
 
+	-- secret cast statusbar between bar background (bar) and icon, texts and spark (bar.bar)
+	if (bar.sbar) then
+		local level = bar:GetFrameLevel();
+		bar.sbar:SetFrameLevel(level + 1);
+		bar.bar:SetFrameLevel(level + 2);
+	end
+
 	if (not tParams.bEn or (self.iCurSpec and not tParams.spectab[self.iCurSpec])) then
 		self:CleanupCastbar(bar);
 		bar:Hide();		-- bar disabled
@@ -902,6 +996,11 @@ function Gnosis:CreateBarFrame(name, iconpath, minval, maxval)
 			f:CreateTexture(nil, "BACKGROUND"), f:CreateTexture(nil, "BACKGROUND"), f:CreateTexture(nil, "BACKGROUND");
 		-- status bar
 		f.bar = self:CreateStatusBar(f);
+		-- client driven statusbar for casts with secret values (retail), drawn below f.bar
+		if (wowmainline) then
+			f.sbar = CreateFrame("StatusBar", nil, f);
+			f.sbar:SetAllPoints(f.bar);
+		end
 		-- icon border
 		f.bicon = f.bar:CreateTexture(nil, "ARTWORK");
 		-- icon
@@ -960,6 +1059,11 @@ function Gnosis:CreateBarFrame(name, iconpath, minval, maxval)
 	-- status bar
 	f.bar:SetMinMaxValues(minval, maxval);
 	f.bar:SetValue(0.0);
+	f.bar.t:Show();
+	f.bSecret = nil;
+	if (f.sbar) then
+		f.sbar:Hide();
+	end
 
 	-- icon
 	f.icon:SetTexCoord(0.09, 0.91, 0.09, 0.91);
@@ -1108,10 +1212,13 @@ function Gnosis:RemoveCastbar(key)
 	-- stop sounds
 	self:StopBarSounds(key);
 
-	-- cleanup
-	self:CleanupCastbar(self.castbars[key]);
-	self.castbars[key]:Hide();
-	table_insert(self.unusedcastbars, self.castbars[key]);
+	-- cleanup (bar frame might already be gone, e.g. removed from an outdated options page)
+	local cb = self.castbars[key];
+	if (cb) then
+		self:CleanupCastbar(cb);
+		cb:Hide();
+		table_insert(self.unusedcastbars, cb);
+	end
 
 	self.castbars[key] = nil;
 	self.s.cbconf[key] = nil;
@@ -1279,15 +1386,21 @@ function Gnosis:SetupSwingBar(cb, spell, icon, fCurTime, bMeleeSwing)
 	self.activebars[barname] = cb;
 end
 
-function Gnosis:SetupGCDbar(cb, spell, fCurTime, right2left, start, cd, spellid)
+-- dur: duration object of the global cooldown if cooldown values are secret (start and cd are nil then)
+function Gnosis:SetupGCDbar(cb, spell, fCurTime, right2left, start, cd, spellid, dur)
 	local barname, cfg = cb.name, cb.conf;
 
 	-- non casttime spell GCD Indicator?
 	if (cfg.unit == "gcd2") then
 		local spellcasttime = select(4, GetSpellInfo(spellid));
-		local playerischanneling = UnitChannelInfo("player");
+		local playerischanneling = IsPresent(UnitChannelInfo("player"));
 
-		if (playerischanneling or not (spellcasttime and spellcasttime <= 0)) then
+		if (IsSecret(spellcasttime)) then
+			-- cast time unknown, skip while casting or channeling
+			if (playerischanneling or IsPresent(UnitCastingInfo("player"))) then
+				return;
+			end
+		elseif (playerischanneling or not (spellcasttime and spellcasttime <= 0)) then
 			return;
 		end
 	end
@@ -1324,6 +1437,11 @@ function Gnosis:SetupGCDbar(cb, spell, fCurTime, right2left, start, cd, spellid)
 	end
 
 	local _, _, icon = GetSpellInfo(spellid);
+	if (dur) then
+		self:SetupGCDbarSecret(cb, cfg, spell, icon, right2left, dur);
+		return;
+	end
+
 	cb.channel = right2left;
 	cb.duration = cd * 1000;
 	cb.endTime = start * 1000 + cd * 1000;
@@ -1428,6 +1546,28 @@ function Gnosis:CreateCastname(cb, cfg, name)
 	end
 end
 
+-- placeholders for secret strings, secret values cannot be passed to string functions
+-- like string.gsub, but can be concatenated
+local SECRET_NAME, SECRET_WHO = "\001", "\002";
+
+local function InsertSecretStrings(str, secretName, secretWho)
+	local result, pos = "", 1;
+	while (true) do
+		local s = string_find(str, "[\001\002]", pos);
+		if (not s) then
+			return result .. string_sub(str, pos);
+		end
+
+		result = result .. string_sub(str, pos, s - 1);
+		if (string_sub(str, s, s) == SECRET_NAME) then
+			result = result .. secretName;
+		else
+			result = result .. secretWho;
+		end
+		pos = s + 1;
+	end
+end
+
 function Gnosis:CreateCastnameFromString(name, cb)
 	-- substitute strings
 	local bRank = false;
@@ -1437,7 +1577,19 @@ function Gnosis:CreateCastnameFromString(name, cb)
 	local lenname;
 	local str, cfg = cb.nfs, cb.conf;
 	local unit = cfg.unit;
-	local uname = cb.tiUnitName and cb.tiUnitName or UnitName(unit);
+	local uname = cb.tiUnitName;
+	if (not IsPresent(uname)) then
+		uname = UnitName(unit);
+	end
+
+	-- secret spell or unit name? use placeholders and insert secret strings at the end
+	local bHasSecrets, secretName, secretWho = false;
+	if (IsSecret(name)) then
+		bHasSecrets, secretName, name = true, name, SECRET_NAME;
+	end
+	if (IsSecret(uname)) then
+		bHasSecrets, secretWho, uname = true, uname, SECRET_WHO;
+	end
 
 	-- target information (player castbar only)
 	local strTarget;
@@ -1599,33 +1751,21 @@ function Gnosis:CreateCastnameFromString(name, cb)
 	end
 
 	-- name
-	if (wowmainline) then
-		if (not issecretvalue(name)) then
-			str = string_gsub(str, "name", name);
-		else
-			str = string_gsub(str, "name", "");
-		end
-	else
-		str = string_gsub(str, "name", name);
-	end
+	str = string_gsub(str, "name", name);
 
 	-- unit name
-	if (wowmainline) then
-		if(uname and (not issecretvalue(name))) then
-			str = string_gsub(str, "who", uname);
-		else
-			str = string_gsub(str, "who", "");
-		end
+	if(uname) then
+		str = string_gsub(str, "who", uname);
 	else
-		if(uname) then
-			str = string_gsub(str, "who", uname);
-		else
-			str = string_gsub(str, "who", "");
-		end
+		str = string_gsub(str, "who", "");
 	end
 
 	-- new line
 	str = string_gsub(str, "\\n", "\n");
+
+	if (bHasSecrets) then
+		str = InsertSecretStrings(str, secretName, secretWho);
+	end
 
 	return str;
 end
@@ -1936,6 +2076,12 @@ function Gnosis:SetupTimerbar(cb, fCurTime, tiinfo)
 	self:CleanupCastbar(cb, true, true);
 	self:GenerateTimeTable(cb, true);
 
+	-- secret duration (retail), let the client drive bar and time text
+	if (tiinfo.durObj) then
+		self:SetupTimerbarSecret(cb, tiinfo);
+		return;
+	end
+
 	-- zoom?
 	local bZoom = curtimer.zoom and curtimer.zoom >= (endTime - fCurTime);
 	-- staticdur?
@@ -2090,34 +2236,29 @@ end
 
 function Gnosis:SetupCastbar(cb, bIsChannel, fCurTime)
 	local barname, cfg = cb.name, cb.conf;
-	local name, displayName, texture, startTime, endTime, isTradeSkill, notInterruptible, id, numStages;
+	local name, displayName, texture, startTime, endTime, isTradeSkill, notInterruptible, id, numStages, castBarID, delayTimeMs;
 
 	if (bIsChannel and wowmainline) then
-		name, displayName, texture, startTime, endTime, isTradeSkill, notInterruptible, id, _, numStages = UnitChannelInfo(cfg.unit);
+		name, displayName, texture, startTime, endTime, isTradeSkill, notInterruptible, id, _, numStages, castBarID = UnitChannelInfo(cfg.unit);
 	elseif (bIsChannel) then
 		name, displayName, texture, startTime, endTime, isTradeSkill, notInterruptible, id = UnitChannelInfo(cfg.unit);
+		numStages = 0
+	elseif (wowmainline) then
+		name, displayName, texture, startTime, endTime, isTradeSkill, id, notInterruptible, _, castBarID, delayTimeMs = UnitCastingInfo(cfg.unit);
 		numStages = 0
 	else
 		name, displayName, texture, startTime, endTime, isTradeSkill, id, notInterruptible = UnitCastingInfo(cfg.unit);
 		numStages = 0
 	end
 
-	if (wowmainline) then
-		if (issecretvalue(startTime)) then
-			startTime = fCurTime
-		end
-		if (issecretvalue(endTime)) then
-			return
-		end
-	end
-	
-	local bIsCharge = numStages > 0
-	
+	-- numEmpowerStages is never secret
+	local bIsCharge = (numStages or 0) > 0
+
 	if bIsCharge then
 		bIsChannel = false
 	end
-	
-	if (not name) then
+
+	if (not IsPresent(name)) then
 		return;
 	end
 
@@ -2131,15 +2272,19 @@ function Gnosis:SetupCastbar(cb, bIsChannel, fCurTime)
 		return;
 	end
 
-	-- blacklisted?
-	if(cfg.bnwtypesel == 2 and cfg.bnwlist) then
+	-- blacklisted? (secret names cannot be compared, never blacklisted)
+	if(cfg.bnwtypesel == 2 and cfg.bnwlist and not IsSecret(name)) then
 		for key, value in pairs(cfg.bnwlist) do
 			if(value == name) then
 				return;
 			end
 		end
-	-- not whitelisted?
+	-- not whitelisted? (secret names cannot be compared, never whitelisted)
 	elseif (cfg.bnwtypesel == 3 and cfg.bnwlist) then
+		if (IsSecret(name)) then
+			return;
+		end
+
 		local bReturn = true;
 		for key, value in pairs(cfg.bnwlist) do
 			if(value == name) then
@@ -2152,6 +2297,14 @@ function Gnosis:SetupCastbar(cb, bIsChannel, fCurTime)
 			return;
 		end
 	end
+
+	-- secret cast times (retail), let the client drive bar and time text
+	if (IsSecret(startTime) or IsSecret(endTime)) then
+		self:SetupCastbarSecret(cb, cfg, bIsChannel, bIsCharge, name, texture,
+			startTime, endTime, notInterruptible, id, castBarID, delayTimeMs);
+		return;
+	end
+	cb.castBarID = castBarID;
 
 	-- tradeskill stuff
 	local bDoResize = true;
@@ -2240,8 +2393,8 @@ function Gnosis:SetupCastbar(cb, bIsChannel, fCurTime)
 		cb.cbs:Show();
 	end
 
-	-- latency & ticks
-	local cs = self.s.channeledspells[cb.castname];
+	-- latency & ticks (secret names cannot be used as table keys)
+	local cs = (not IsSecret(cb.castname)) and self.s.channeledspells[cb.castname] or nil;
 	if (cs and cs.ben and not(cs.bhidenonplayer and cfg.unit ~= "player")) then
 		local totalticks = cs.ticks;
 		local noninitticks = cs.binit and (totalticks-1) or totalticks;
@@ -2358,23 +2511,483 @@ function Gnosis:SetupCastbar(cb, bIsChannel, fCurTime)
 end
 
 function Gnosis:activeBarColors(cb)
-	if (not (wowmainline and issecretvalue(cb.notInterruptible)) and cb.notInterruptible) then
-		cb.bar:SetStatusBarColor(unpack(cb.conf.colBarNI));
-		self:SetBorderColor(cb, cb.conf.colBorderNI, cb.conf.colBarBg);
-		if (cb.conf.bShowShield) then
+	local cfg = cb.conf;
+	local fill = cb.bSecret and cb.sbar or cb.bar;
+	local colNormal = (cb.channel and --[[cfg.unit == "player" and]] cfg.bartype == "cb") and cfg.colChanneled or cfg.colBar;
+	cb.sicon:SetAlpha(1);
+
+	if (IsSecret(cb.notInterruptible)) then
+		-- secret interrupt state, colors and shield picked by the client
+		local tex = cb.bSecret and cb.sbar:GetStatusBarTexture() or cb.bar.t;
+		tex:SetVertexColorFromBoolean(cb.notInterruptible, CreateColor(unpack(cfg.colBarNI)), CreateColor(unpack(colNormal)));
+		self:SetBorderColorFromBoolean(cb, cb.notInterruptible, cfg.colBorderNI, cfg.colBorder, cfg.colBarBg);
+		cb.sicon:Show();
+		cb.sicon:SetAlphaFromBoolean(cb.notInterruptible, cfg.bShowShield and 1 or 0, 0);
+	elseif (cb.notInterruptible) then
+		fill:SetStatusBarColor(unpack(cfg.colBarNI));
+		self:SetBorderColor(cb, cfg.colBorderNI, cfg.colBarBg);
+		if (cfg.bShowShield) then
 			cb.sicon:Show();
 		else
 			cb.sicon:Hide();
 		end
 	else
-		if cb.channel and --[[cb.conf.unit == "player" and]] cb.conf.bartype == "cb" then
-			cb.bar:SetStatusBarColor(unpack(cb.conf.colChanneled));
-		else
-			cb.bar:SetStatusBarColor(unpack(cb.conf.colBar));
-		end
-		self:SetBorderColor(cb, cb.conf.colBorder, cb.conf.colBarBg);
+		fill:SetStatusBarColor(unpack(colNormal));
+		self:SetBorderColor(cb, cfg.colBorder, cfg.colBarBg);
 		cb.sicon:Hide();
 	end
+end
+
+-- secret casts (retail)
+-- bar fill, spark and time text are driven by the client using duration objects
+
+local function SecretTimerDirection(cb, cfg)
+	if (cb.channel and not cfg.bChanAsNorm) then
+		return Enum.StatusBarTimerDirection.RemainingTime;
+	end
+	return Enum.StatusBarTimerDirection.ElapsedTime;
+end
+
+-- leading edge of the statusbar fill texture
+local function SecretSparkEdge(cfg)
+	if (cfg.orient == 2) then
+		return cfg.bInvDir and "BOTTOM" or "TOP";
+	end
+	return cfg.bInvDir and "LEFT" or "RIGHT";
+end
+
+-- spark follows the edge of the client driven fill texture
+local function AnchorSecretSpark(cb, cfg)
+	cb.cbs:ClearAllPoints();
+	cb.cbs:SetPoint("CENTER", cb.sbar:GetStatusBarTexture(), SecretSparkEdge(cfg), 0, 0);
+	cb.cbs:Show();
+end
+
+-- global cooldown, isActive is never secret
+local GCD_SPELL_ID = 61304;
+
+local function IsGCDActive()
+	local info = C_Spell.GetSpellCooldown(GCD_SPELL_ID);
+	return IsPresent(info) and not IsSecret(info) and info.isActive == true;
+end
+
+-- same spark placement as Gnosis:Update(), val in [0, 1]
+local function PositionSpark(cb, cfg, val)
+	cb.cbs:ClearAllPoints();
+	if (cfg.orient == 2) then
+		if (cfg.bInvDir) then
+			cb.cbs:SetPoint("CENTER", cb.bar, "TOP", 0, -val * cb.barheight);
+		else
+			cb.cbs:SetPoint("CENTER", cb.bar, "BOTTOM", 0, val * cb.barheight);
+		end
+	else
+		if (cfg.bInvDir) then
+			cb.cbs:SetPoint("CENTER", cb.bar, "RIGHT", -val * cb.barwidth, 0);
+		else
+			cb.cbs:SetPoint("CENTER", cb.bar, "LEFT", val * cb.barwidth, 0);
+		end
+	end
+end
+
+function Gnosis:GetSecretCastDuration(unit, bIsChannel, bIsCharge)
+	if (bIsCharge) then
+		return UnitEmpoweredChannelDuration(unit, true);
+	elseif (bIsChannel) then
+		return UnitChannelDuration(unit);
+	end
+	return UnitCastingDuration(unit);
+end
+
+function Gnosis:SetupCastbarSecret(cb, cfg, bIsChannel, bIsCharge, name, texture, startTime, endTime, notInterruptible, id, castBarID, delayTimeMs)
+	local barname, unit = cb.name, cfg.unit;
+	if (not cb.sbar) then
+		return;
+	end
+
+	if ((self.activebars[barname] or self.fadeoutbars[barname])) then
+		self:CleanupCastbar(cb, true);
+	end
+
+	-- duration objects are not secret themselves, fall back to raw (secret) cast times otherwise
+	local dur = self:GetSecretCastDuration(unit, bIsChannel, bIsCharge);
+	if (not IsPresent(dur)) then
+		return;
+	end
+	local bManualFill = IsSecret(dur);
+
+	cb.bIsTrade = nil;
+	cb.bSecret = true;
+	cb.bManualFill = bManualFill;
+	cb.secretMissing = 0;
+	cb.durObj = (not bManualFill) and dur or nil;
+	cb.channel = bIsChannel;
+	cb.charge = bIsCharge;
+	cb.notInterruptible = notInterruptible;
+	cb.icon:SetTexture(texture);
+	cb.id = id;
+	cb.castBarID = castBarID;
+
+	-- show castbar text (no automatic resize of long names, string width is secret)
+	if (cfg.bResizeLongName and cb.defFont) then
+		cb.ctext:SetFont(cb.defFont, cb.defFS, cb.defFO);
+	end
+	cb.ctext:SetText(self:CreateCastname(cb, cfg, name));
+	cb.castname = name;
+
+	-- swap Gnosis' statusbar texture for the client driven statusbar
+	cb.bar.t:Hide();
+	if (bManualFill) then
+		cb.sbar:SetMinMaxValues(startTime, endTime);
+		cb.sbar:SetValue(GetTime() * 1000);
+	else
+		cb.sbar:SetTimerDuration(dur, Enum.StatusBarInterpolation.Immediate, SecretTimerDirection(cb, cfg));
+	end
+	cb.sbar:Show();
+	cb:SetAlpha(cfg.alpha);
+	cb:Show();
+
+	-- non interruptible colors
+	self:activeBarColors(cb);
+
+	-- castbar spark
+	if (cfg.bShowCBS) then
+		AnchorSecretSpark(cb, cfg);
+	end
+
+	-- no ticks, latency box or pushback calculation for secret casts
+	cb.totalticks = 0;
+	cb.shownticks = 0;
+	cb.channelticktime = 0;
+	cb.pushback = 0;
+
+	-- set bar active
+	cb.bActive = true;
+	self.activebars[barname] = cb;
+
+	-- time text
+	self:SetupSecretTimeText(cb, delayTimeMs);
+
+	if (not (cfg.incombatsel == 1 or cfg.incombatsel == self.curincombattype or cfg.bUnlocked)) then
+		cb:Hide();
+		cb.bBarHidden = true;
+	end
+end
+
+-- gcd bars with secret cooldown values, uses the duration object of the global cooldown spell
+-- (no check whether spell is off the global cooldown, current_gcd for 'gcd' timers unavailable)
+function Gnosis:FindGCDBarsSecret(spell, fCurTime, spellid)
+	self.current_gcd = nil;
+
+	if (not IsGCDActive()) then
+		return;
+	end
+
+	local dur = C_Spell.GetSpellCooldownDuration(GCD_SPELL_ID);
+	if (not IsPresent(dur) or IsSecret(dur)) then
+		return;
+	end
+
+	local cb = self:FindCB("gcd");
+	while (cb) do
+		self:SetupGCDbar(cb, spell, fCurTime, false, nil, nil, spellid, dur);
+		cb = self:FindCBNext("gcd");
+	end
+
+	cb = self:FindCB("gcd2");
+	while (cb) do
+		self:SetupGCDbar(cb, spell, fCurTime, false, nil, nil, spellid, dur);
+		cb = self:FindCBNext("gcd2");
+	end
+end
+
+-- called by Gnosis:SetupGCDbar() after all checks
+function Gnosis:SetupGCDbarSecret(cb, cfg, spell, icon, right2left, dur)
+	local barname = cb.name;
+
+	cb.bSecret = true;
+	cb.bSecretGCD = true;
+	cb.durObj = dur;
+	cb.channel = right2left;
+	cb.icon:SetTexture(icon);
+	cb.id = nil;
+
+	cb.ctext:SetText(self:CreateCastname(cb, cfg, spell));
+	cb.castname = "";
+
+	-- swap Gnosis' statusbar texture for the client driven statusbar
+	cb.bar.t:Hide();
+	cb.sbar:SetStatusBarColor(unpack(cfg.colBar));
+	cb.sbar:SetTimerDuration(dur, Enum.StatusBarInterpolation.Immediate, SecretTimerDirection(cb, cfg));
+	cb.sbar:Show();
+	cb:SetAlpha(cfg.alpha);
+	cb:Show();
+
+	-- castbar spark
+	if (cfg.bShowCBS) then
+		AnchorSecretSpark(cb, cfg);
+	end
+
+	-- pushback (also vital for clipping test)
+	cb.pushback = 0;
+
+	-- set bar active
+	cb.bActive = true;
+	self.activebars[barname] = cb;
+
+	-- time text
+	self:SetupSecretTimeText(cb);
+end
+
+-- timer bar with secret duration (cooldowns), called by Gnosis:SetupTimerbar()
+-- no zoom, staticdur, latency box or stacks, bar end is detected by Gnosis:ScanTimerbar()
+function Gnosis:SetupTimerbarSecret(cb, tiinfo)
+	local cfg, curtimer = cb.conf, tiinfo.curtimer;
+
+	cb.bSecret = true;
+	cb.durObj = tiinfo.durObj;
+	cb.castname = tiinfo.castname;
+	cb.icontex = (not curtimer.hideicon) and tiinfo.icon or nil;
+	cb.stacks = nil;
+	cb.tiUnit = tiinfo.tiunit;
+	cb.tiUnitName = UnitName(cb.tiUnit);
+	cb.tiType = curtimer.type;
+	cb.channel = tiinfo.bChannel;
+	cb.id = nil;
+
+	selectIcon(cb, curtimer);
+
+	-- show castbar text
+	cb.ctext:SetText(self:CreateCastname(cb, cfg, cb.castname, ""));
+
+	-- colors, including overrides
+	cb.sbar:SetStatusBarColor(unpack(curtimer.sbcolor or cfg.colBar));
+	self:SetBorderColor(cb, curtimer.bcolor or cfg.colBorder, cfg.colBarBg, curtimer.hideicon);
+	cb.sicon:Hide();
+
+	-- swap Gnosis' statusbar texture for the client driven statusbar
+	cb.bar.t:Hide();
+	cb.sbar:SetTimerDuration(cb.durObj, Enum.StatusBarInterpolation.Immediate, SecretTimerDirection(cb, cfg));
+	cb.sbar:Show();
+	cb:SetAlpha(cfg.alpha);
+	cb:Show();
+
+	-- castbar spark
+	cb.cbs_check = false;
+	cb.cbs_hidden = not curtimer.cbs;
+	if (curtimer.cbs) then
+		AnchorSecretSpark(cb, cfg);
+	else
+		cb.cbs:Hide();
+	end
+
+	-- pushback irrelevant for timer bars
+	cb.pushback = 0;
+
+	-- set bar active
+	cb.bActive = true;
+	self.activebars[cb.name] = cb;
+
+	-- time text
+	self:SetupSecretTimeText(cb);
+end
+
+-- new duration object for an active secret timer bar (cooldown may have changed)
+function Gnosis:RefreshTimerbarSecret(cb, durObj)
+	cb.durObj = durObj;
+	cb.sbar:SetTimerDuration(durObj, Enum.StatusBarInterpolation.Immediate, SecretTimerDirection(cb, cb.conf));
+	if (cb.timeBinding and cb.timeBinding:IsEnabled()) then
+		cb.timeBinding:SetDuration(durObj);
+	end
+end
+
+-- cast delayed or channel updated
+function Gnosis:RefreshSecretCastbar(cb)
+	local cfg = cb.conf;
+	local unit = cfg.unit;
+
+	if (cb.bManualFill) then
+		local _, _, _, startTime, endTime = (cb.channel and UnitChannelInfo or UnitCastingInfo)(unit);
+		if (IsPresent(endTime)) then
+			cb.sbar:SetMinMaxValues(startTime, endTime);
+		end
+		return;
+	end
+
+	local dur = self:GetSecretCastDuration(unit, cb.channel, cb.charge);
+	if (not IsPresent(dur) or IsSecret(dur)) then
+		return;
+	end
+
+	cb.durObj = dur;
+	cb.sbar:SetTimerDuration(dur, Enum.StatusBarInterpolation.Immediate, SecretTimerDirection(cb, cfg));
+
+	local delayTimeMs;
+	if (not (cb.channel or cb.charge)) then
+		delayTimeMs = select(11, UnitCastingInfo(unit));
+	end
+	self:SetupSecretTimeText(cb, delayTimeMs);
+end
+
+-- called by Gnosis:Update() for active secret casts
+function Gnosis:UpdateSecretCastbar(cb, conf, fCurTime)
+	if (conf.incombatsel == 1 or conf.incombatsel == self.curincombattype or conf.bUnlocked) then
+		if (cb.bManualFill) then
+			cb.sbar:SetValue(fCurTime);
+		end
+
+		if (cb.reanchor) then
+			self:ReAnchorBar(cb);
+		end
+
+		-- timer bars use different code to show/hide castbars
+		if (cb.bBarHidden and not cb.tiType) then
+			cb.bBarHidden = nil;
+			cb:Show();
+		end
+	elseif (not cb.tiType) then
+		cb:Hide();
+		cb.bBarHidden = true;
+	end
+
+	-- remaining time is secret, so the end of the cast cannot be detected here
+	if (cb.tiType) then
+		-- timer bars, end of timer detected by Gnosis:ScanTimerbar()
+	elseif (cb.bSecretGCD) then
+		-- no event at the end of the global cooldown, but its active state is never secret
+		if (not IsGCDActive()) then
+			if (conf.bUnlocked or conf.bShowWNC) then
+				self:CleanupCastbar(cb);
+			else
+				self:PrepareCastbarForFadeout(cb, fCurTime);
+			end
+		end
+	elseif (self.rangeCheck) then
+		-- safety net in case the unit stopped casting without sending an event
+		local unit = conf.unit;
+		if (IsPresent(UnitCastingInfo(unit)) or IsPresent(UnitChannelInfo(unit))) then
+			cb.secretMissing = 0;
+		else
+			cb.secretMissing = (cb.secretMissing or 0) + 1;
+			if (cb.secretMissing >= 3) then
+				if (conf.bUnlocked or conf.bShowWNC) then
+					self:CleanupCastbar(cb);
+				else
+					self:PrepareCastbarForFadeout(cb, fCurTime);
+				end
+			end
+		end
+	end
+end
+
+-- end of secret cast, hand bar back to Gnosis' own statusbar (filled up to the end of the cast)
+function Gnosis:EndSecretCast(cb)
+	if (not cb.bSecret) then
+		return;
+	end
+
+	local cfg = cb.conf;
+	cb.bSecret = nil;
+	cb.bSecretGCD = nil;
+	cb.bManualFill = nil;
+	cb.durObj = nil;
+	if (cb.timeBinding) then
+		cb.timeBinding:SetEnabled(false);
+	end
+
+	local val = (cb.channel and not cfg.bChanAsNorm) and 0 or 1;
+	cb.bar:SetValue(val);
+	-- keep current fill color (possibly secret, picked by not interruptible state)
+	cb.bar.t:SetVertexColor(cb.sbar:GetStatusBarTexture():GetVertexColor());
+	cb.bar.t:Show();
+	cb.sbar:Hide();
+	PositionSpark(cb, cfg, val);
+end
+
+-- numeric formatter replicating GenerateTimeTable_Item() for duration text bindings
+local function CreateSecretTimeFormatter(item)
+	if (item.secretFormatter) then
+		return item.secretFormatter;
+	end
+
+	local breakpoints = {};
+	if (item.bPerc) then
+		-- percentage properties are fractions
+		table_insert(breakpoints, { threshold = 0, format = item.str, components = { { div = 0.01 } } });
+	else
+		if (item.bIncPrecision) then
+			table_insert(breakpoints, { threshold = 0, format = "" });
+			table_insert(breakpoints, { threshold = 0.05, format = item.str_inc_prec });
+			table_insert(breakpoints, { threshold = item.incprecval, format = item.str });
+		else
+			table_insert(breakpoints, { threshold = 0, format = item.str });
+		end
+
+		if (item.bMin) then
+			local down = Enum.NumericRuleFormatRounding.Down;
+			table_insert(breakpoints, { threshold = 60, format = "%.0f:%02.0f", components = {
+				{ div = 60, step = 1, rounding = down },
+				{ mod = 60, step = 1, rounding = down },
+			} });
+		end
+	end
+
+	local formatter = C_StringUtil.CreateNumericRuleFormatter();
+	formatter:SetBreakpoints(breakpoints);
+	item.secretFormatter = formatter;
+	return formatter;
+end
+
+-- time format string (cb.timetable) as duration text binding, updated by the client
+function Gnosis:SetupSecretTimeText(cb, delayTimeMs)
+	local P = Enum.DurationTextBindingProperty;
+	local fmt, components = {}, {};
+
+	for _, v in ipairs(cb.timetable) do
+		if (v.type == 1) then
+			-- plain string, '{}' are binding placeholders
+			table_insert(fmt, (string_gsub(v.str, "[{}]", "")));
+		elseif (v.type == 5) then
+			-- pushback, delayTimeMs is never secret
+			if (delayTimeMs and delayTimeMs ~= 0 and not v.bPerc) then
+				table_insert(fmt, string_format(v.str, delayTimeMs / 1000));
+			end
+		elseif (v.type == 3 and v.bPerc) then
+			table_insert(fmt, string_format(v.str, 100));
+		else
+			local property;
+			if (v.type == 2) then
+				property = v.bPerc and P.RemainingPercent or P.RemainingDuration;
+			elseif (v.type == 3) then
+				property = P.TotalDuration;
+			else
+				property = v.bPerc and P.ElapsedPercent or P.ElapsedDuration;
+			end
+
+			table_insert(fmt, "{}");
+			table_insert(components, { property = property, formatter = CreateSecretTimeFormatter(v) });
+		end
+	end
+
+	local binding = cb.timeBinding;
+	if (#components == 0 or not cb.durObj) then
+		if (binding) then
+			binding:SetEnabled(false);
+		end
+		cb.rtext:SetText(cb.durObj and table_concat(fmt) or "");
+		return;
+	end
+
+	if (not binding) then
+		binding = C_DurationUtil.CreateDurationTextBinding();
+		cb.timeBinding = binding;
+	end
+
+	binding:SetFontString(cb.rtext);
+	binding:SetTextFormat(table_concat(fmt), components);
+	binding:SetDuration(cb.durObj);
+	binding:SetUpdateInterval(0);
+	binding:SetEnabled(true);
+	binding:UpdateFontString();
 end
 
 function Gnosis:CloseAllTradeskillBars()
@@ -2511,6 +3124,7 @@ function Gnosis:PrepareCastbarForFadeout(cb, fCurTime, bForce)
 	local barname, cfg = cb.name, cb.conf;
 
 	if (self.activebars[barname] or bForce) then
+		self:EndSecretCast(cb);
 		cb.bActive = false;
 		self.activebars[barname] = nil;
 
@@ -2534,12 +3148,13 @@ function Gnosis:PrepareCastbarForFadeout(cb, fCurTime, bForce)
 end
 
 function Gnosis:CleanupCastbar(cb, bDoNotSetValue, bDoNotOverwriteNfsTfs)
-	local barname, cfg = cb.name, cb.conf;
-
 	if (not cb) then
 		return;
 	end
 
+	local barname, cfg = cb.name, cb.conf;
+
+	self:EndSecretCast(cb);
 	cb.bActive = false;
 	if (self.activebars[barname]) then
 		self.activebars[barname] = nil;
@@ -2559,6 +3174,7 @@ function Gnosis:CleanupCastbar(cb, bDoNotSetValue, bDoNotOverwriteNfsTfs)
 		cb.rtext:SetText("");
 		cb.icon:SetTexture(cfg.bUnlocked and self.toyIcon or nil);
 		cb.sicon:Hide();
+		cb.sicon:SetAlpha(1);
 	end
 
 	-- hide latency values
@@ -2579,7 +3195,8 @@ function Gnosis:CleanupCastbar(cb, bDoNotSetValue, bDoNotOverwriteNfsTfs)
 	cb.tiUnitName = nil;
 	cb.tiType = nil;
 	cb.dur = nil;
-	
+	cb.castBarID = nil;
+
 	-- reset range switch
 	cb.outOfRangeColorApplied = nil;
 
@@ -2593,7 +3210,9 @@ end
 
 function Gnosis:SetupBarString(cb, cfg, fCurTime, bDoResize)
 	-- adjust text size (long strings), only if "free alignment" is not selected
-	if(cfg.alignment ~= "FREE" and cfg.forcefreealign ~= true and cfg.bResizeLongName and bDoResize) then
+	-- (not possible if name contains secret strings, string width is secret)
+	if(cfg.alignment ~= "FREE" and cfg.forcefreealign ~= true and cfg.bResizeLongName and bDoResize and
+			not IsSecret(cb.ctext:GetStringWidth())) then
 		-- set default font size
 		cb.ctext:SetFont(cb.defFont, cb.defFS, cb.defFO);
 
@@ -2642,6 +3261,11 @@ function Gnosis:SetupBarString(cb, cfg, fCurTime, bDoResize)
 			);
 		end
 	else
+		if (cfg.bResizeLongName and bDoResize and cb.defFont) then
+			-- undo previous resizing (resize not possible for secret strings)
+			cb.ctext:SetFont(cb.defFont, cb.defFS, cb.defFO);
+		end
+
 		cb.rtext:SetText(self:GenerateTime(cb,
 				(cb.endTime - fCurTime) / 1000,
 				(cb.dur or cb.duration) / 1000,

@@ -47,6 +47,15 @@ Gnosis.dialog = LibStub("LibDialog-1.0");
 Gnosis.libs = LibStub("AceSerializer-3.0");
 Gnosis.libc = LibStub("LibCompress");
 
+-- secret values (retail 12.x), safe to call on every client
+-- secret values cannot be compared, tested, indexed with or used in arithmetic
+Gnosis.IsSecret = issecretvalue or function() return false; end
+Gnosis.IsPresent = function(v)
+	-- nil check that does not perform a boolean test on secret values
+	return Gnosis.IsSecret(v) or v ~= nil;
+end
+Gnosis.CanAccessTable = canaccesstable or function() return true; end
+
 -- classic only libraries
 if (wowclassic) then
 	Gnosis.libclcno = LibStub("LibClassicCasterino");
@@ -103,7 +112,10 @@ function Gnosis:InitialConfig()
 	self.optFrame = LibStub("AceConfigDialog-3.0"):AddToBlizOptions("Gnosis", self.L["AddonName"]);
 	self.optCBs = LibStub("AceConfigDialog-3.0"):AddToBlizOptions(self.optCBsName, Gnosis.L["TabCastbars"], "Gnosis");
 	LibStub("AceConfigDialog-3.0"):AddToBlizOptions("Gnosis Channeled Spells", Gnosis.L["TabChanneledSpells"], "Gnosis");
-	LibStub("AceConfigDialog-3.0"):AddToBlizOptions("Gnosis Combattext/Clip test", Gnosis.L["TabCTClipTest"], "Gnosis");
+	-- clip test and channeled tick combat text need the combat log, not available to addons in retail
+	if (not wowmainline) then
+		LibStub("AceConfigDialog-3.0"):AddToBlizOptions("Gnosis Combattext/Clip test", Gnosis.L["TabCTClipTest"], "Gnosis");
+	end
 	self.optCfgs = LibStub("AceConfigDialog-3.0"):AddToBlizOptions(self.optCfgsName, Gnosis.L["TabConfig"], "Gnosis");
 end
 
@@ -211,7 +223,7 @@ function Gnosis:OpenCfgOptions()
 		elseif (wowwc or wowcc) then
 			LibStub("AceConfigRegistry-3.0"):NotifyChange(Gnosis.optCfgsName);
 		else
-			Settings.OpenToCategory(Gnosis.optCfgs);
+			Settings.OpenToCategory(Gnosis.optCfgs.name);
 		end
 	end
 
@@ -220,12 +232,15 @@ function Gnosis:OpenCfgOptions()
 	elseif (wowwc or wowcc) then
 		LibStub("AceConfigRegistry-3.0"):NotifyChange(Gnosis.optCfgsName);
 	else
-		Settings.OpenToCategory(Gnosis.optCfgs);
+		Settings.OpenToCategory(Gnosis.optCfgs.name);
 	end
 	self.iofcfgcalled = true;
 end
 
 function Gnosis:OpenCastbarOptions()
+	-- refresh an already shown castbar options page (e.g. after removing a bar)
+	LibStub("AceConfigRegistry-3.0"):NotifyChange(Gnosis.optCBsName);
+
 	if (not self.iofcbcalled) then
 		-- call twice the first time
 		if (wowbcc) then
@@ -233,7 +248,7 @@ function Gnosis:OpenCastbarOptions()
 		elseif (wowwc or wowcc) then
 			LibStub("AceConfigRegistry-3.0"):NotifyChange(Gnosis.optCBsName);
 		else
-			Settings.OpenToCategory(Gnosis.optCBs);
+			Settings.OpenToCategory(Gnosis.optCBs.name);
 		end
 	end
 
@@ -242,7 +257,7 @@ function Gnosis:OpenCastbarOptions()
 	elseif (wowwc or wowcc) then
 		LibStub("AceConfigRegistry-3.0"):NotifyChange(Gnosis.optCBsName);
 	else
-		Settings.OpenToCategory(Gnosis.optCBs);
+		Settings.OpenToCategory(Gnosis.optCBs.name);
 	end
 	self.iofcbcalled = true;
 end
@@ -1002,6 +1017,11 @@ function Gnosis:SetupChannelData()
 	local fCurTime = GetTime() * 1000.0;
 	local name, displayName, texture, startTime, endTime = UnitChannelInfo("player");
 
+	-- clip test data cannot be computed from secret values
+	if (self.IsSecret(name) or self.IsSecret(endTime)) then
+		return;
+	end
+
 	local cs = self.s.channeledspells[name];
 	if (cs and cs.ben and (cs.bcliptest or cs.bcombattext or cs.bticksound)) then
 		local cc = {};
@@ -1067,6 +1087,9 @@ end
 
 function Gnosis:UpdateClipTest()
 	local spell, _, _, startTime, endTime = UnitChannelInfo("player");
+	if (self.IsSecret(spell) or self.IsSecret(endTime)) then
+		return;
+	end
 	local cc = (self.nextchannel and self.nextchannel.spell == spell) and self.nextchannel or
 		((self.curchannel and self.curchannel.spell == spell) and self.curchannel or nil);
 

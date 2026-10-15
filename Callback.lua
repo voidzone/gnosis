@@ -20,6 +20,22 @@ local GetSpellInfo = GetSpellInfo or function(spellID)
 	end
 end
 
+-- secret value helpers (see Gnosis.lua)
+local IsSecret = Gnosis.IsSecret;
+local IsPresent = Gnosis.IsPresent;
+
+-- IsSpellInRange global was removed from retail, C_Spell version returns true/false/nil
+local IsSpellOutOfRange;
+if (C_Spell and C_Spell.IsSpellInRange) then
+	IsSpellOutOfRange = function(spell, unit)
+		return spell ~= nil and C_Spell.IsSpellInRange(spell, unit) == false;
+	end
+else
+	IsSpellOutOfRange = function(spell, unit)
+		return IsSpellInRange(spell, unit) == 0;
+	end
+end
+
 -- local variables
 local _;
 local rangeCheckTarget, rangeCheckSpell;
@@ -79,8 +95,11 @@ function Gnosis:Update()
 	-- update bars
 	for key, value in pairs(self.activebars) do
 		local conf = value.conf;
-		local rem = value.endTime - fCurTime;
-		if (rem >= 0) then
+		local rem = (not value.bSecret) and (value.endTime - fCurTime);
+		if (value.bSecret) then
+			-- secret cast, bar fill and time text are driven by the client (Bars.lua)
+			self:UpdateSecretCastbar(value, conf, fCurTime);
+		elseif (rem >= 0) then
 			if (conf.incombatsel == 1 or conf.incombatsel == self.curincombattype or conf.bUnlocked) then
 				local val = min(rem/value.duration, 1);
 				value.rtext:SetText(self:GenerateTime(value,
@@ -166,7 +185,7 @@ end
 
 function Gnosis:playerCastbarRangeCheck(cb)
 	if cb.conf.bRangeCheck and cb.conf.unit == "player" and cb.conf.bartype == "cb" then
-		if IsSpellInRange(rangeCheckSpell, rangeCheckTarget) == 0 then
+		if IsSpellOutOfRange(rangeCheckSpell, rangeCheckTarget) then
 			if not cb.outOfRangeColorApplied then
 				cb.bar:SetStatusBarColor(unpack(cb.conf.colOutOfRange));
 				cb.outOfRangeColorApplied = true;
@@ -182,7 +201,7 @@ end
 
 -- events
 function Gnosis:UNIT_SPELLCAST_SUCCEEDED(event, unit, _, spellid)
-	if (unit == "player") then
+	if (unit == "player" and not IsSecret(spellid)) then
 		local spell = GetSpellInfo(spellid);
 		local fCurTime = GetTime() * 1000.0;
 		self:FindGCDBars(spell, fCurTime, spellid);
@@ -213,10 +232,10 @@ function Gnosis:UNIT_SPELLCAST_START(event, unit, _, spellid)
 		until cb == nil;
 	end
 
-	if (unit == "player") then
+	if (unit == "player" and not IsSecret(spellid)) then
 		local spell = GetSpellInfo(spellid);
 		local fCurTime = GetTime() * 1000.0;
-		
+
 		--set up variables for the range check
 		rangeCheckSpell = spell;
 
@@ -242,7 +261,10 @@ function Gnosis:UNIT_SPELLCAST_CHANNEL_START(event, unit, _, spellid)
 	-- clip test
 	if (unit == "player") then
 		--set up variables for the range check
-		rangeCheckSpell = GetSpellInfo(spellid);
+		rangeCheckSpell = nil;
+		if (not IsSecret(spellid)) then
+			rangeCheckSpell = GetSpellInfo(spellid);
+		end
 		
 		-- generate new clip test data
 		self:SetupChannelData();
@@ -273,6 +295,7 @@ function Gnosis:UNIT_SPELLCAST_STOP(event, unit, _, spellid)
 		repeat
 			if (cb.bActive) then
 				local conf = cb.conf;
+				self:EndSecretCast(cb);
 				if ((conf.bUnlocked or conf.bShowWNC) and not (cb.bIsTrade and cb.tscnt > 1)) then
 					self:CleanupCastbar(cb);
 				elseif (not (cb.bIsTrade and cb.tscnt > 1)) then
@@ -296,6 +319,7 @@ function Gnosis:UNIT_SPELLCAST_CHANNEL_STOP(event, unit, _, spellid)
 		repeat
 			if (cb.bActive) then
 				local conf = cb.conf;
+				self:EndSecretCast(cb);
 				if (conf.bUnlocked or conf.bShowWNC) then
 					self:CleanupCastbar(cb);
 				else
@@ -320,6 +344,7 @@ function Gnosis:UNIT_SPELLCAST_EMPOWER_STOP(event, unit, _, spellid)
 		repeat
 			if (cb.bActive) then
 				local conf = cb.conf;
+				self:EndSecretCast(cb);
 				if (conf.bUnlocked or conf.bShowWNC) then
 					self:CleanupCastbar(cb);
 				else
@@ -341,9 +366,11 @@ function Gnosis:UNIT_SPELLCAST_CHANNEL_UPDATE(event, unit)
 	local cb = self:FindCB(unit);
 	if (cb) then
 		repeat
-			if (cb.bActive) then
+			if (cb.bSecret) then
+				self:RefreshSecretCastbar(cb);
+			elseif (cb.bActive) then
 				local spell, _, _, startTime, endTime = UnitChannelInfo(unit);
-				if (spell) then
+				if (IsPresent(spell) and not IsSecret(endTime)) then
 					self:UpdateCastbar(cb, startTime, endTime, spell);
 				end
 			end
@@ -362,9 +389,11 @@ function Gnosis:UNIT_SPELLCAST_EMPOWER_UPDATE(event, unit)
 	local cb = self:FindCB(unit);
 	if (cb) then
 		repeat
-			if (cb.bActive) then
+			if (cb.bSecret) then
+				self:RefreshSecretCastbar(cb);
+			elseif (cb.bActive) then
 				local spell, _, _, startTime, endTime = UnitChannelInfo(unit);
-				if (spell) then
+				if (IsPresent(spell) and not IsSecret(endTime)) then
 					self:UpdateCastbar(cb, startTime, endTime, spell);
 				end
 			end
@@ -383,9 +412,11 @@ function Gnosis:UNIT_SPELLCAST_DELAYED(event, unit)
 	local cb = self:FindCB(unit);
 	if (cb) then
 		repeat
-			if (cb.bActive) then
+			if (cb.bSecret) then
+				self:RefreshSecretCastbar(cb);
+			elseif (cb.bActive) then
 				local spell, _, _, startTime, endTime = UnitCastingInfo(unit);
-				if (spell) then
+				if (IsPresent(spell) and not IsSecret(endTime)) then
 					self:UpdateCastbar(cb, startTime, endTime, spell);
 				end
 			end
@@ -399,9 +430,8 @@ function Gnosis:UNIT_SPELLCAST_INTERRUPTIBLE(event, unit)
 	if (cb) then
 		repeat
 			if (cb.bActive) then
-				cb.bar:SetStatusBarColor(unpack(cb.conf.colBar));
-				self:SetBorderColor(cb, cb.conf.colBorder, cb.conf.colBarBg);
-				cb.sicon:Hide();
+				cb.notInterruptible = false;
+				self:activeBarColors(cb);
 			end
 			cb = self:FindCBNext(unit);
 		until cb == nil;
@@ -413,29 +443,41 @@ function Gnosis:UNIT_SPELLCAST_NOT_INTERRUPTIBLE(event, unit)
 	if (cb) then
 		repeat
 			if (cb.bActive) then
-				cb.bar:SetStatusBarColor(unpack(cb.conf.colBarNI));
-				self:SetBorderColor(cb, cb.conf.colBorderNI, cb.conf.colBarBg);
-				if (cb.conf.bShowShield) then
-					cb.sicon:Show();
-				else
-					cb.sicon:Hide();
-				end
+				cb.notInterruptible = true;
+				self:activeBarColors(cb);
 			end
 			cb = self:FindCBNext(unit);
 		until cb == nil;
 	end
 end
 
-function Gnosis:UNIT_SPELLCAST_INTERRUPTED(event, unit, lineid, spellid)
-	local spell = GetSpellInfo(spellid)
+-- is the event (castGUID, spell name, castBarID) related to the cast shown by the castbar?
+-- uses the original comparison if possible, castBarID (never secret) if values are secret
+local function IsSameCast(cbValue, eventValue, cbCastBarID, eventCastBarID)
+	if (not (IsSecret(cbValue) or IsSecret(eventValue))) then
+		return cbValue == eventValue;
+	elseif (cbCastBarID ~= nil and eventCastBarID ~= nil) then
+		return cbCastBarID == eventCastBarID;
+	end
+
+	-- no way to tell, events are already filtered by unit
+	return true;
+end
+
+function Gnosis:UNIT_SPELLCAST_INTERRUPTED(event, unit, lineid, spellid, interruptedBy, castBarID)
+	local spell = spellid;
+	if (not IsSecret(spellid)) then
+		spell = GetSpellInfo(spellid);
+	end
 	local cb = self:FindCB(unit);
 	if (cb) then
 		local fCurTime = GetTime() * 1000.0;
 		repeat
 			-- cb.castname == spell : bandaid for classes that can cast spells while running
 			-- the wow api sends interrupt events for previously casted spells...
-			if (cb.bActive and cb.castname == spell) then
+			if (cb.bActive and IsSameCast(cb.castname, spell, cb.castBarID, castBarID)) then
 				local conf = cb.conf;
+				self:EndSecretCast(cb);
 				cb.bar:SetValue(cb.channel and 0 or 1.0);
 				if (cb.channel) then
 					cb.bar:SetStatusBarColor(unpack(conf.colInterrupted));
@@ -463,15 +505,15 @@ function Gnosis:UNIT_SPELLCAST_INTERRUPTED(event, unit, lineid, spellid)
 	end
 end
 
-function Gnosis:UNIT_SPELLCAST_FAILED(event, unit, lineid, spellid)
-	local spell = GetSpellInfo(spellid)
+function Gnosis:UNIT_SPELLCAST_FAILED(event, unit, lineid, spellid, castBarID)
 	local cb = self:FindCB(unit);
 	if (cb) then
 		local fCurTime = GetTime() * 1000.0;
 		repeat
 			if (cb.bActive) then
 				local conf = cb.conf;
-				if (cb.id and cb.id == lineid) then
+				if (IsPresent(cb.id) and IsSameCast(cb.id, lineid, cb.castBarID, castBarID)) then
+					self:EndSecretCast(cb);
 					cb.bar:SetValue(cb.channel and 0 or 1.0);
 					if (cb.channel) then
 						cb.bar:SetStatusBarColor(unpack(conf.colFailed));
@@ -723,17 +765,17 @@ end
 
 function Gnosis:PLAYER_ENTERING_WORLD()
 	-- create spellcasting events for focus/target when entering world
-	if (UnitCastingInfo("focus")) then
+	if (IsPresent(UnitCastingInfo("focus"))) then
 		Gnosis:UNIT_SPELLCAST_START("UNIT_SPELLCAST_START", "focus");
-	elseif (UnitChannelInfo("focus")) then
+	elseif (IsPresent(UnitChannelInfo("focus"))) then
 		Gnosis:UNIT_SPELLCAST_CHANNEL_START("UNIT_SPELLCAST_CHANNEL_START", "focus");
 	else
 		Gnosis:UNIT_SPELLCAST_CHANNEL_STOP("UNIT_SPELLCAST_CHANNEL_STOP", "focus");
 	end
 
-	if (UnitCastingInfo("target")) then
+	if (IsPresent(UnitCastingInfo("target"))) then
 		Gnosis:UNIT_SPELLCAST_START("UNIT_SPELLCAST_START", "target");
-	elseif (UnitChannelInfo("target")) then
+	elseif (IsPresent(UnitChannelInfo("target"))) then
 		Gnosis:UNIT_SPELLCAST_CHANNEL_START("UNIT_SPELLCAST_CHANNEL_START", "target");
 	else
 		Gnosis:UNIT_SPELLCAST_CHANNEL_STOP("UNIT_SPELLCAST_CHANNEL_STOP", "target");
@@ -742,9 +784,9 @@ end
 
 function Gnosis:PLAYER_FOCUS_CHANGED()
 	-- create spellcasting events for focus unit when changing focus target
-	if (UnitCastingInfo("focus")) then
+	if (IsPresent(UnitCastingInfo("focus"))) then
 		Gnosis:UNIT_SPELLCAST_START("UNIT_SPELLCAST_START", "focus");
-	elseif (UnitChannelInfo("focus")) then
+	elseif (IsPresent(UnitChannelInfo("focus"))) then
 		Gnosis:UNIT_SPELLCAST_CHANNEL_START("UNIT_SPELLCAST_CHANNEL_START", "focus");
 	else
 		Gnosis:UNIT_SPELLCAST_CHANNEL_STOP("UNIT_SPELLCAST_CHANNEL_STOP", "focus");
@@ -753,9 +795,9 @@ end
 
 function Gnosis:PLAYER_TARGET_CHANGED()
 	-- create spellcasting events for target unit when changing target
-	if (UnitCastingInfo("target")) then
+	if (IsPresent(UnitCastingInfo("target"))) then
 		Gnosis:UNIT_SPELLCAST_START("UNIT_SPELLCAST_START", "target");
-	elseif (UnitChannelInfo("target")) then
+	elseif (IsPresent(UnitChannelInfo("target"))) then
 		Gnosis:UNIT_SPELLCAST_CHANNEL_START("UNIT_SPELLCAST_CHANNEL_START", "target");
 	else
 		Gnosis:UNIT_SPELLCAST_CHANNEL_STOP("UNIT_SPELLCAST_CHANNEL_STOP", "target");

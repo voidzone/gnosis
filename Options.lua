@@ -14,6 +14,9 @@ local string_len = strlenutf8;
 -- local variables
 local _;
 
+-- mainline (retail) or classic
+local wowmainline = (WOW_PROJECT_ID == WOW_PROJECT_MAINLINE);
+
 function Gnosis:OptCreateBasicTables()
 	Gnosis.tUnits = { player = "Player", target = "Target", focus = "Focus", pet = "Pet/Vehicle",
 		party1 = "Party 1", party2 = "Party 2", party3 = "Party 3", party4 = "Party 4", party5 = "Party 5",
@@ -31,6 +34,12 @@ function Gnosis:OptCreateBasicTables()
 		mouseover = "Mouseover", mouseovertarget = "Mouseover's Target",
 		vehicle = "Vehicle",
 	};
+
+	-- melee swings are detected using the combat log, not available to addons in retail
+	if (wowmainline) then
+		Gnosis.tUnits.sm = "Swing Melee (not available in retail)";
+		Gnosis.tUnits.smr = "Swing Melee&Range (range only in retail)";
+	end
 
 	Gnosis.tSpecs = { [0] = "1 & 2 & 3 & 4", [1] = "1", [2] = "2", [3] = "3", [4] = "4", [5] = Gnosis.L["tSpecsSelectSpec"] };
 
@@ -659,6 +668,7 @@ function Gnosis:CreateChannelSpellsOpt()
 					width = "full",
 				},
 				bclip = {
+					hidden = wowmainline,	-- needs the combat log
 					order = self:GetNextTableIndex(),
 					name = Gnosis.L["OptEnClipTest"],
 					type = "toggle",
@@ -667,6 +677,7 @@ function Gnosis:CreateChannelSpellsOpt()
 					width = "full",
 				},
 				bticksound = {
+					hidden = wowmainline,	-- needs the combat log
 					order = self:GetNextTableIndex(),
 					name = Gnosis.L["OptPlayTickSound_N"],
 					desc = Gnosis.L["OptPlayTickSound_D"],
@@ -676,6 +687,7 @@ function Gnosis:CreateChannelSpellsOpt()
 					width = "full",
 				},
 				bcombattext = {
+					hidden = wowmainline,	-- needs the combat log
 					order = self:GetNextTableIndex(),
 					name = Gnosis.L["OptCombTicks"],
 					type = "toggle",
@@ -684,6 +696,7 @@ function Gnosis:CreateChannelSpellsOpt()
 					width = "full",
 				},
 				ctoutput = {
+					hidden = wowmainline,	-- needs the combat log
 					order = self:GetNextTableIndex(),
 					name = Gnosis.L["OptOutputString"],
 					desc = Gnosis.L["OptOutputStringDesc"],
@@ -693,6 +706,7 @@ function Gnosis:CreateChannelSpellsOpt()
 					width = "full",
 				},
 				bicon = {
+					hidden = wowmainline,	-- needs the combat log
 					order = self:GetNextTableIndex(),
 					name = Gnosis.L["OptShowSpellIcon"],
 					type = "toggle",
@@ -700,6 +714,7 @@ function Gnosis:CreateChannelSpellsOpt()
 					set = function(info,val) Gnosis.s.channeledspells[key].bicon = val; end,
 				},
 				bsticky = {
+					hidden = wowmainline,	-- needs the combat log
 					order = self:GetNextTableIndex(),
 					name = Gnosis.L["OptStickyClips"],
 					type = "toggle",
@@ -707,6 +722,7 @@ function Gnosis:CreateChannelSpellsOpt()
 					set = function(info,val) Gnosis.s.channeledspells[key].bsticky = val; end,
 				},
 				fontsizeclip = {
+					hidden = wowmainline,	-- needs the combat log
 					order = self:GetNextTableIndex(),
 					name = Gnosis.L["OptCSFSClip"],
 					type = "range",
@@ -717,6 +733,7 @@ function Gnosis:CreateChannelSpellsOpt()
 					isPercent = false,
 				},
 				fontsizenclip = {
+					hidden = wowmainline,	-- needs the combat log
 					order = self:GetNextTableIndex(),
 					name = Gnosis.L["OptCSFSNonClip"],
 					type = "range",
