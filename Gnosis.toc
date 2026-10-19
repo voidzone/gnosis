@@ -5,7 +5,7 @@
 ## Version: @project-version@
 ## SavedVariables: GnosisDB, GnosisConfigs
 ## SavedVariablesPerCharacter: GnosisChar, GnosisCharConfig
-## OptionalDeps: Ace3, AceGUI-3.0-SharedMediaWidgets, LibClassicCasterino, LibClassicDurations, LibCompress, LibDialog-1.0, LibRangeCheck-3.0, LibSharedMedia-3.0
+## OptionalDeps: Ace3, AceGUI-3.0-SharedMediaWidgets, LibClassicCasterino, LibClassicDurations, LibDeflate, LibDialog-1.0, LibRangeCheck-3.0, LibSharedMedia-3.0
 ## LoadOnDemand: 0
 ## DefaultState: enabled
 ## X-Revision: @project-revision@
@@ -28,11 +28,11 @@ Libs\AceGUI-3.0-SharedMediaWidgets\widget.xml
 Libs\LibRangeCheck-3.0\LibRangeCheck-3.0\LibRangeCheck-3.0.lua
 Libs\LibDialog-1.0\lib.xml
 Libs\AceSerializer-3.0\AceSerializer-3.0.xml
-Libs\LibCompress\lib.xml
+Libs\LibDeflate\LibDeflate.lua
 Libs\LibClassicCasterino\LibClassicCasterino.lua
 Libs\LibClassicDurations\LibClassicDurations.xml
 
-## X-Embeds: Ace3, AceGUI-3.0-SharedMediaWidgets, LibBetterBlizzOptions-1.0, LibClassicCasterino, LibClassicDurations, LibCompress, LibDialog-1.0, LibRangeCheck-3.0, LibSharedMedia-3.0
+## X-Embeds: Ace3, AceGUI-3.0-SharedMediaWidgets, LibBetterBlizzOptions-1.0, LibClassicCasterino, LibClassicDurations, LibDeflate, LibDialog-1.0, LibRangeCheck-3.0, LibSharedMedia-3.0
 #@end-no-lib-strip@
 
 # xml

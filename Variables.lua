@@ -232,8 +232,8 @@ Gnosis.tSoundChannels = {
 function Gnosis:StartupVariables()
 	local fCurTime = GetTime() * 1000;
 
-	self.ver = 6.00;
-	self.optver = 4.62;
+	self.ver = 6.01;
+	self.optver = 4.67;
 	self.build = "@project-version@";
 	self.addonname = "Gnosis";
 	local strVer = string_format("v%.2f", self.ver);

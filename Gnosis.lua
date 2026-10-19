@@ -45,7 +45,7 @@ Gnosis.smw = LibStub("AceGUISharedMediaWidgets-1.0");
 Gnosis.range = LibStub("LibRangeCheck-3.0");
 Gnosis.dialog = LibStub("LibDialog-1.0");
 Gnosis.libs = LibStub("AceSerializer-3.0");
-Gnosis.libc = LibStub("LibCompress");
+Gnosis.libc = LibStub("LibDeflate");
 
 -- secret values (retail 12.x), safe to call on every client
 -- secret values cannot be compared, tested, indexed with or used in arithmetic
@@ -1512,10 +1512,10 @@ function Gnosis:CommCb(message, distribution, sender)
 			local comp = Gnosis.libs:Serialize(Gnosis.s.cbconf[barname]);
 			-- compress and encode for communication via addon channel
 			local lc = Gnosis.libc;
-			comp = lc:Compress(comp);
-			comp = lc:GetAddonEncodeTable():Encode(comp);
+			comp = lc:CompressDeflate(comp);
+			comp = lc:EncodeForWoWAddonChannel(comp);
 			-- generate 32bit hash
-			local comp_hash = lc:fcs32final(lc:fcs32update(lc:fcs32init(), comp));
+			local comp_hash = lc:Adler32(comp);
 			-- complete message to send
 			local msg = "[" .. Gnosis:ExchangeEscapeSequenceChars(barname, "\\:%[%]") .. "]" .. comp_hash .. ":" .. comp;
 
@@ -1526,16 +1526,16 @@ function Gnosis:CommCb(message, distribution, sender)
 		-- bar data received
 		local lc = Gnosis.libc;
 		-- compute hash
-		local comp_hash = lc:fcs32final(lc:fcs32update(lc:fcs32init(), serial_tab));
+		local comp_hash = lc:Adler32(serial_tab);
 
 		-- check hash
 		if (comp_hash == tonumber(hash)) then
 			-- message ok, import
 			local ok;
 			-- decode string
-			local uncomp = lc:GetAddonEncodeTable():Decode(serial_tab);
+			local uncomp = lc:DecodeForWoWAddonChannel(serial_tab);
 			-- decompress
-			uncomp = lc:Decompress(uncomp);
+			uncomp = uncomp and lc:DecompressDeflate(uncomp);
 			-- deserialize, uncomp holds original table afterwards
 			ok, uncomp = Gnosis.libs:Deserialize(uncomp);
 
@@ -1664,10 +1664,10 @@ function Gnosis:ExportBarEncStr(key)
 		local len = string.len(comp);	-- do not use utf8 version
 		-- compress and encode for communication via addon channel
 		local lc = Gnosis.libc;
-		comp = lc:Compress(comp);
+		comp = lc:CompressDeflate(comp);
 		comp = self:EncStr(comp);
 		-- generate 32bit hash
-		local comp_hash = lc:fcs32final(lc:fcs32update(lc:fcs32init(), comp));
+		local comp_hash = lc:Adler32(comp);
 		-- complete message to send
 		local msg = "[" .. Gnosis:ExchangeEscapeSequenceChars(key, "\\:%[%]") .. ":" ..
 			comp_hash .. ":" .. len .. ":=" .. comp .. ";]";
@@ -1685,14 +1685,14 @@ function Gnosis:ExtractAndImportEncStr(str)
 		local s, f, hash, len, import = string_find(match_last, ":(%d+):(%d+):=([0-9A-Za-z%#%*]+);%]");
 
 		if (s) then
-			if (tonumber(hash) == lc:fcs32final(lc:fcs32update(lc:fcs32init(), import))) then
+			if (tonumber(hash) == lc:Adler32(import)) then
 				-- compress and encode for communication via addon channel
 				-- message ok, import
 				local ok;
 				-- decode string
 				local uncomp = Gnosis:DecStr(import, tonumber(len));
 				-- decompress
-				uncomp = lc:Decompress(uncomp);
+				uncomp = uncomp and lc:DecompressDeflate(uncomp);
 				-- deserialize, uncomp holds original table afterwards
 				ok, uncomp = Gnosis.libs:Deserialize(uncomp);
 
